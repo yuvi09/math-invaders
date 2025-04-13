@@ -65,6 +65,21 @@ export class MainScene extends Phaser.Scene {
         // Add restart key
         this.input.keyboard!.addKey('R').on('down', () => this.restartGame());
 
+        // Add touch controls for mobile
+        this.input.on('pointermove', (pointer: Phaser.Input.Pointer) => {
+            if (pointer.isDown) {
+                this.player.x = Phaser.Math.Clamp(
+                    pointer.x,
+                    this.player.width / 2,
+                    Number(this.game.config.width) - this.player.width / 2
+                );
+            }
+        });
+
+        this.input.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
+            this.shoot();
+        });
+
         // Create groups
         this.bullets = this.physics.add.group({
             classType: Phaser.Physics.Arcade.Image,
