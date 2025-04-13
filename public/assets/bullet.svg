@@ -1,4 +1,19 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<svg width="4" height="12" viewBox="0 0 4 12" xmlns="http://www.w3.org/2000/svg">
-    <rect width="4" height="12" rx="2" fill="#ffff00" stroke="#ffcc00" stroke-width="0.5"/>
-</svg> 
+
+<svg width="8" height="16" xmlns="http://www.w3.org/2000/svg">
+    <defs>
+        <linearGradient id="bulletGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+            <stop offset="0%" style="stop-color:#fef08a;stop-opacity:1"/>
+            <stop offset="100%" style="stop-color:#facc15;stop-opacity:1"/>
+        </linearGradient>
+        <filter id="bulletGlow">
+            <feGaussianBlur stdDeviation="1" result="coloredBlur"/>
+            <feMerge>
+                <feMergeNode in="coloredBlur"/>
+                <feMergeNode in="SourceGraphic"/>
+            </feMerge>
+        </filter>
+    </defs>
+    
+    <!-- Energy bolt -->
+    <path d="M4,0 L8,4 L4,16 L0,4 Z" fill="url(#bulletGradient)" filter="url(#bulletGlow)"/>
+</svg>

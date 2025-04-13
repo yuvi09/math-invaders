@@ -1,4 +1,50 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<svg width="32" height="32" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg">
-    <path d="M16 4 L24 28 L16 24 L8 28 L16 4" fill="#00ff00" stroke="#008800" stroke-width="1"/>
-</svg> 
+
+<svg width="64" height="64" xmlns="http://www.w3.org/2000/svg">
+    <defs>
+        <!-- Gradient for the ship body -->
+        <linearGradient id="shipBody" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" style="stop-color:#4ade80;stop-opacity:1" />
+            <stop offset="100%" style="stop-color:#22c55e;stop-opacity:1" />
+        </linearGradient>
+        
+        <!-- Gradient for wings -->
+        <linearGradient id="wingGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" style="stop-color:#22c55e;stop-opacity:1" />
+            <stop offset="100%" style="stop-color:#15803d;stop-opacity:1" />
+        </linearGradient>
+        
+        <!-- Glow effect -->
+        <filter id="glow">
+            <feGaussianBlur stdDeviation="1" result="coloredBlur"/>
+            <feMerge>
+                <feMergeNode in="coloredBlur"/>
+                <feMergeNode in="SourceGraphic"/>
+            </feMerge>
+        </filter>
+    </defs>
+    
+    <!-- Engine glow -->
+    <circle cx="32" cy="60" r="6" fill="#4ade80" filter="url(#glow)" opacity="0.6"/>
+    
+    <!-- Main body (fuselage) -->
+    <path d="M32,4 L44,32 L32,60 L20,32 Z" fill="url(#shipBody)" filter="url(#glow)"/>
+    
+    <!-- Wings -->
+    <path d="M20,28 L4,32 L20,44 Z" fill="url(#wingGradient)"/>
+    <path d="M44,28 L60,32 L44,44 Z" fill="url(#wingGradient)"/>
+    
+    <!-- Wing details -->
+    <line x1="4" y1="32" x2="20" y2="32" stroke="#86efac" stroke-width="1"/>
+    <line x1="44" y1="32" x2="60" y2="32" stroke="#86efac" stroke-width="1"/>
+    
+    <!-- Cockpit -->
+    <circle cx="32" cy="20" r="6" fill="#f0f9ff" opacity="0.9"/>
+    <circle cx="32" cy="20" r="4" fill="#0ea5e9" opacity="0.7"/>
+    
+    <!-- Laser cannons -->
+    <rect x="8" y="31" width="6" height="2" fill="#22c55e" filter="url(#glow)"/>
+    <rect x="50" y="31" width="6" height="2" fill="#22c55e" filter="url(#glow)"/>
+    
+    <!-- Energy lines -->
+    <path d="M32,8 L32,56" stroke="#86efac" stroke-width="1" opacity="0.5"/>
+</svg>

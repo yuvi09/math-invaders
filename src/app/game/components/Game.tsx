@@ -1,10 +1,11 @@
 'use client';
 
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type Phaser from 'phaser';
 
 export default function Game() {
     const gameRef = useRef<HTMLDivElement>(null);
+    const [isLoading, setIsLoading] = useState(true);
 
     useEffect(() => {
         let game: Phaser.Game | null = null;
@@ -48,6 +49,11 @@ export default function Game() {
                     scene: MainScene
                 });
 
+                // Hide loading message when game starts
+                game.events.once('ready', () => {
+                    setIsLoading(false);
+                });
+
                 // Return cleanup function
                 return () => {
                     document.removeEventListener('touchmove', preventDefault);
@@ -75,10 +81,14 @@ export default function Game() {
     return (
         <div 
             ref={gameRef}
-            className="w-full h-full bg-black rounded-lg flex items-center justify-center touch-none"
+            className="w-full h-full bg-black rounded-lg flex items-center justify-center touch-none relative"
             style={{ touchAction: 'none' }}
         >
-            <div className="text-white text-xl">Loading game...</div>
+            {isLoading && (
+                <div className="text-white text-xl absolute inset-0 flex items-center justify-center">
+                    Loading game...
+                </div>
+            )}
         </div>
     );
 } 

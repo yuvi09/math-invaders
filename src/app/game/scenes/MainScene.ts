@@ -5,6 +5,8 @@ interface GameState {
     isPaused: boolean;
     firepower: number;
     isGameOver: boolean;
+    health: number;
+    gameTime: number;
 }
 
 export class MainScene extends Phaser.Scene {
@@ -12,23 +14,29 @@ export class MainScene extends Phaser.Scene {
     private cursors!: Phaser.Types.Input.Keyboard.CursorKeys;
     private bullets!: Phaser.Physics.Arcade.Group;
     private enemies!: Phaser.Physics.Arcade.Group;
-    private bossEnemies!: Phaser.Physics.Arcade.Group;
+    private laserEnemies!: Phaser.Physics.Arcade.Group;
+    private enemyLasers!: Phaser.Physics.Arcade.Group;
     private explosions!: Phaser.GameObjects.Group;
     private scoreText!: Phaser.GameObjects.Text;
+    private healthText!: Phaser.GameObjects.Text;
     private pauseText!: Phaser.GameObjects.Text;
     private gameState: GameState = {
         score: 0,
         isPaused: false,
         firepower: 1,
-        isGameOver: false
+        isGameOver: false,
+        health: 100,
+        gameTime: 0
     };
 
     private lastShootTime: number = 0;
     private lastEnemySpawnTime: number = 0;
-    private lastBossSpawnTime: number = 0;
+    private lastLaserEnemySpawnTime: number = 0;
+    private lastLaserShootTime: number = 0;
     private shootDelay: number = 250;
     private enemySpawnDelay: number = 2000;
-    private bossSpawnDelay: number = 15000; // Boss every 15 seconds
+    private laserEnemySpawnDelay: number = 15000; // Laser enemy every 15 seconds
+    private laserShootDelay: number = 2000; // Laser shoots every 2 seconds
     private speed: number = 300;
 
     constructor() {
@@ -36,25 +44,41 @@ export class MainScene extends Phaser.Scene {
     }
 
     preload() {
-        // Load assets
-        this.load.svg('player', 'assets/player.svg');
-        this.load.svg('enemy', 'assets/enemy.svg');
-        this.load.svg('bullet', 'assets/bullet.svg');
+        // Load player ships
+        this.load.image('player', 'assets/skyforce_assets/PNG/playerShip3_blue.png');
+        this.load.image('player-damage1', 'assets/skyforce_assets/PNG/playerShip3_orange.png');
+        this.load.image('player-damage2', 'assets/skyforce_assets/PNG/playerShip3_red.png');
+        
+        // Load enemy ships
+        this.load.image('enemy', 'assets/skyforce_assets/PNG/ufoRed.png');
+        this.load.image('laser-enemy', 'assets/skyforce_assets/PNG/ufoYellow.png');
+        
+        // Load projectiles
+        this.load.image('bullet', 'assets/skyforce_assets/PNG/Lasers/laserBlue01.png');
+        this.load.image('enemy-laser', 'assets/skyforce_assets/PNG/Lasers/laserRed01.png');
+        
+        // Load effects
+        for (let i = 0; i <= 19; i++) {
+            const num = i.toString().padStart(2, '0');
+            this.load.image(`fire${num}`, `assets/skyforce_assets/PNG/Effects/fire${num}.png`);
+        }
+        
+        // Load shield effects
+        this.load.image('shield1', 'assets/skyforce_assets/PNG/Effects/shield1.png');
+        this.load.image('shield2', 'assets/skyforce_assets/PNG/Effects/shield2.png');
+        this.load.image('shield3', 'assets/skyforce_assets/PNG/Effects/shield3.png');
         
         // Load audio
         this.load.audio('shoot', 'assets/shoot.mp3');
         this.load.audio('explosion', 'assets/explosion.mp3');
         this.load.audio('boss-explosion', 'assets/boss-explosion.mp3');
-
-        // Load particle effects
-        this.load.svg('particle', 'assets/particle.svg');
     }
 
     create() {
-        // Create player
+        // Create player with proper scale and physics
         this.player = this.physics.add.sprite(400, 500, 'player');
         this.player.setCollideWorldBounds(true);
-        this.player.setScale(1.5);
+        this.player.setScale(0.6); // Adjust scale to fit game
 
         // Setup input
         this.cursors = this.input.keyboard!.createCursorKeys();
@@ -80,7 +104,47 @@ export class MainScene extends Phaser.Scene {
             this.shoot();
         });
 
-        // Create groups
+        // Create fire animation
+        this.anims.create({
+            key: 'fire',
+            frames: Array.from({ length: 20 }, (_, i) => ({ key: `fire${i.toString().padStart(2, '0')}` })),
+            frameRate: 30,
+            repeat: -1
+        });
+
+        // Create shield animation
+        this.anims.create({
+            key: 'shield',
+            frames: [
+                { key: 'shield1' },
+                { key: 'shield2' },
+                { key: 'shield3' }
+            ],
+            frameRate: 10,
+            repeat: -1
+        });
+
+        // Add engine fire to player
+        const fire = this.add.sprite(this.player.x, this.player.y + 40, 'fire00');
+        fire.setScale(0.5);
+        fire.play('fire');
+        this.player.on('destroy', () => fire.destroy());
+
+        // Update fire position with player
+        this.player.on('update', () => {
+            fire.x = this.player.x;
+            fire.y = this.player.y + 40;
+        });
+
+        // Create explosion animation
+        this.anims.create({
+            key: 'explode',
+            frames: this.anims.generateFrameNumbers('explosion', { start: 0, end: 8 }),
+            frameRate: 15,
+            repeat: 0
+        });
+
+        // Create groups with proper scales
         this.bullets = this.physics.add.group({
             classType: Phaser.Physics.Arcade.Image,
             maxSize: 30,
@@ -92,8 +156,14 @@ export class MainScene extends Phaser.Scene {
             runChildUpdate: true
         });
 
-        this.bossEnemies = this.physics.add.group({
+        this.laserEnemies = this.physics.add.group({
             classType: Phaser.Physics.Arcade.Sprite,
+            runChildUpdate: true
+        });
+
+        this.enemyLasers = this.physics.add.group({
+            classType: Phaser.Physics.Arcade.Image,
+            maxSize: 10,
             runChildUpdate: true
         });
 
@@ -116,7 +186,7 @@ export class MainScene extends Phaser.Scene {
 
         this.physics.add.overlap(
             this.bullets,
-            this.bossEnemies,
+            this.laserEnemies,
             (bullet: Phaser.GameObjects.GameObject | Phaser.Physics.Arcade.Body | Phaser.Physics.Arcade.StaticBody | Phaser.Tilemaps.Tile,
              enemy: Phaser.GameObjects.GameObject | Phaser.Physics.Arcade.Body | Phaser.Physics.Arcade.StaticBody | Phaser.Tilemaps.Tile) => {
                 if (bullet instanceof Phaser.Physics.Arcade.Image && 
@@ -128,8 +198,29 @@ export class MainScene extends Phaser.Scene {
             this
         );
 
+        // Add player-laser collision
+        this.physics.add.overlap(
+            this.player,
+            this.enemyLasers,
+            (player: Phaser.GameObjects.GameObject | Phaser.Physics.Arcade.Body | Phaser.Physics.Arcade.StaticBody | Phaser.Tilemaps.Tile,
+             laser: Phaser.GameObjects.GameObject | Phaser.Physics.Arcade.Body | Phaser.Physics.Arcade.StaticBody | Phaser.Tilemaps.Tile) => {
+                if (laser instanceof Phaser.Physics.Arcade.Image) {
+                    laser.destroy();
+                    this.handlePlayerLaserHit();
+                }
+            },
+            undefined,
+            this
+        );
+
         // Add score text
         this.scoreText = this.add.text(16, 16, 'Score: 0', {
+            fontSize: '32px',
+            color: '#ffffff'
+        });
+
+        // Add health text
+        this.healthText = this.add.text(16, 50, 'Health: 100%', {
             fontSize: '32px',
             color: '#ffffff'
         });
@@ -144,10 +235,13 @@ export class MainScene extends Phaser.Scene {
         this.pauseText.setVisible(false);
     }
 
-    update(time: number) {
+    update(time: number, delta: number) {
         if (this.gameState.isGameOver || this.gameState.isPaused) {
             return;
         }
+
+        // Update game time
+        this.gameState.gameTime += delta;
 
         if (!this.player || !this.cursors) return;
 
@@ -172,10 +266,22 @@ export class MainScene extends Phaser.Scene {
             this.lastEnemySpawnTime = time;
         }
 
-        // Spawn boss enemies periodically
-        if (time > this.lastBossSpawnTime + this.bossSpawnDelay) {
-            this.spawnBossEnemy();
-            this.lastBossSpawnTime = time;
+        // Adjust laser enemy spawn rate based on game time
+        const laserEnemySpawnRate = Math.max(5000, 15000 - Math.floor(this.gameState.gameTime / 60000) * 2000);
+        if (time > this.lastLaserEnemySpawnTime + laserEnemySpawnRate) {
+            this.spawnLaserEnemy();
+            this.lastLaserEnemySpawnTime = time;
+        }
+
+        // Adjust laser shoot rate based on game time
+        const laserShootRate = Math.max(500, 2000 - Math.floor(this.gameState.gameTime / 60000) * 300);
+        if (time > this.lastLaserShootTime + laserShootRate) {
+            this.laserEnemies.getChildren().forEach((enemy) => {
+                if (enemy instanceof Phaser.Physics.Arcade.Sprite) {
+                    this.enemyShootLaser(enemy);
+                }
+            });
+            this.lastLaserShootTime = time;
         }
 
         // Clean up bullets
@@ -193,8 +299,18 @@ export class MainScene extends Phaser.Scene {
             }
         });
 
+        // Clean up enemy lasers
+        this.enemyLasers.getChildren().forEach((laser) => {
+            if (laser instanceof Phaser.Physics.Arcade.Image && laser.y > Number(this.game.config.height) + 50) {
+                laser.destroy();
+            }
+        });
+
         // Update score text
         this.scoreText.setText(`Score: ${this.gameState.score}`);
+
+        // Update health text
+        this.healthText.setText(`Health: ${this.gameState.health}%`);
     }
 
     private shoot() {
@@ -213,7 +329,7 @@ export class MainScene extends Phaser.Scene {
             
             if (bullet) {
                 bullet.setVelocityY(-400);
-                bullet.setScale(1.5);
+                bullet.setScale(0.5);
             }
         }
     }
@@ -223,7 +339,7 @@ export class MainScene extends Phaser.Scene {
         const enemy = this.enemies.create(x, -50, 'enemy') as Phaser.Physics.Arcade.Sprite;
         
         if (enemy) {
-            enemy.setScale(1.2);
+            enemy.setScale(0.6);
             const speed = Phaser.Math.Between(100, 200);
             enemy.setVelocityY(speed);
             const horizontalSpeed = Phaser.Math.Between(-50, 50);
@@ -231,16 +347,28 @@ export class MainScene extends Phaser.Scene {
         }
     }
 
-    private spawnBossEnemy() {
+    private spawnLaserEnemy() {
         const x = Phaser.Math.Between(100, Number(this.game.config.width) - 100);
-        const boss = this.bossEnemies.create(x, -100, 'enemy') as Phaser.Physics.Arcade.Sprite;
+        const enemy = this.laserEnemies.create(x, -100, 'laser-enemy') as Phaser.Physics.Arcade.Sprite;
         
-        if (boss) {
-            boss.setScale(3);
-            boss.setTint(0xff0000);
+        if (enemy) {
+            enemy.setScale(0.7);
             const speed = Phaser.Math.Between(50, 100);
-            boss.setVelocityY(speed);
-            boss.setData('health', 5); // Boss takes 5 hits to destroy
+            enemy.setVelocityY(speed);
+            enemy.setData('health', 3); // Laser enemy takes 3 hits to destroy
+        }
+    }
+
+    private enemyShootLaser(enemy: Phaser.Physics.Arcade.Sprite) {
+        const laser = this.enemyLasers.create(
+            enemy.x,
+            enemy.y + enemy.height / 2,
+            'enemy-laser'
+        ) as Phaser.Physics.Arcade.Image;
+        
+        if (laser) {
+            laser.setScale(0.5);
+            laser.setVelocityY(300);
         }
     }
 
@@ -266,27 +394,71 @@ export class MainScene extends Phaser.Scene {
         }
     }
 
-    private destroyEnemy(enemy: Phaser.Physics.Arcade.Sprite, isBoss: boolean) {
+    private destroyEnemy(enemy: Phaser.Physics.Arcade.Sprite, isLaserEnemy: boolean) {
         // Play explosion sound
-        const sound = this.sound.add(isBoss ? 'boss-explosion' : 'explosion', { volume: 0.3 });
+        const sound = this.sound.add(isLaserEnemy ? 'boss-explosion' : 'explosion', { volume: 0.3 });
         sound.play();
 
-        // Create explosion effect
-        const particles = this.add.particles(0, 0, 'particle', {
-            speed: { min: -800, max: 800 },
-            angle: { min: 0, max: 360 },
-            scale: { start: 0.5, end: 0 },
-            blendMode: 'ADD',
-            lifespan: 1000,
-            gravityY: 800
+        // Create fire effect at explosion point
+        const fire = this.add.sprite(enemy.x, enemy.y, 'fire00');
+        fire.setScale(isLaserEnemy ? 1 : 0.7);
+        fire.play('fire');
+        fire.once('animationcomplete', () => {
+            fire.destroy();
         });
-
-        particles.setPosition(enemy.x, enemy.y);
-        particles.explode(isBoss ? 50 : 20);
 
         // Cleanup
         enemy.destroy();
-        this.time.delayedCall(1000, () => particles.destroy());
+    }
+
+    private handlePlayerLaserHit() {
+        this.gameState.health = Math.max(0, this.gameState.health - 20);
+        
+        if (this.gameState.health <= 0) {
+            this.gameOver();
+        } else {
+            // Update player sprite based on damage
+            if (this.gameState.health <= 30) {
+                this.player.setTexture('player-damage3');
+            } else if (this.gameState.health <= 60) {
+                this.player.setTexture('player-damage2');
+            } else if (this.gameState.health <= 80) {
+                this.player.setTexture('player-damage1');
+            }
+            
+            // Flash player
+            this.player.setTint(0xff0000);
+            this.time.delayedCall(200, () => {
+                this.player.clearTint();
+            });
+        }
+    }
+
+    private gameOver() {
+        this.gameState.isGameOver = true;
+        
+        // Create fire effect at player position
+        const fire = this.add.sprite(this.player.x, this.player.y, 'fire00');
+        fire.setScale(1.2);
+        fire.play('fire');
+        fire.once('animationcomplete', () => {
+            fire.destroy();
+        });
+
+        // Play explosion sound
+        const sound = this.sound.add('boss-explosion', { volume: 0.3 });
+        sound.play();
+
+        // Hide player
+        this.player.setVisible(false);
+
+        // Show game over text
+        const gameOverText = this.add.text(400, 300, 'GAME OVER\nPress R to restart', {
+            fontSize: '48px',
+            color: '#ffffff',
+            align: 'center'
+        });
+        gameOverText.setOrigin(0.5);
     }
 
     private togglePause() {
@@ -305,9 +477,12 @@ export class MainScene extends Phaser.Scene {
         this.gameState.firepower = 1;
         this.gameState.isPaused = false;
         this.gameState.isGameOver = false;
+        this.gameState.health = 100;
+        this.gameState.gameTime = 0;
         
         this.enemies.clear(true, true);
-        this.bossEnemies.clear(true, true);
+        this.laserEnemies.clear(true, true);
+        this.enemyLasers.clear(true, true);
         this.bullets.clear(true, true);
         
         this.scene.restart();
