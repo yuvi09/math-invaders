@@ -76,7 +76,7 @@ export class MainScene extends Phaser.Scene {
             }
         });
 
-        this.input.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
+        this.input.on('pointerdown', () => {
             this.shoot();
         });
 
