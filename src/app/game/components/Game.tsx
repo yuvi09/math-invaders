@@ -2,7 +2,6 @@
 
 import { useEffect, useRef } from 'react';
 import type Phaser from 'phaser';
-import type { MainScene } from '../scenes/MainScene';
 
 export default function Game() {
     const gameRef = useRef<HTMLDivElement>(null);
