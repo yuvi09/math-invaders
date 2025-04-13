@@ -2,6 +2,7 @@
 
 import { useEffect, useRef } from 'react';
 import type Phaser from 'phaser';
+import type { MainScene } from '../scenes/MainScene';
 
 export default function Game() {
     const gameRef = useRef<HTMLDivElement>(null);
@@ -13,7 +14,6 @@ export default function Game() {
             try {
                 const Phaser = (await import('phaser')).default;
                 const { MainScene } = await import('../scenes/MainScene');
-                const { gameConfig } = await import('@/lib/phaser/config');
 
                 if (!gameRef.current) {
                     return;

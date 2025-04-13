@@ -88,8 +88,10 @@ export class MainScene extends Phaser.Scene {
         this.physics.add.overlap(
             this.bullets,
             this.enemies,
-            (bullet: any, enemy: any) => {
-                if (bullet && enemy) {
+            (bullet: Phaser.GameObjects.GameObject | Phaser.Physics.Arcade.Body | Phaser.Physics.Arcade.StaticBody | Phaser.Tilemaps.Tile,
+             enemy: Phaser.GameObjects.GameObject | Phaser.Physics.Arcade.Body | Phaser.Physics.Arcade.StaticBody | Phaser.Tilemaps.Tile) => {
+                if (bullet instanceof Phaser.Physics.Arcade.Image && 
+                    enemy instanceof Phaser.Physics.Arcade.Sprite) {
                     this.handleBulletEnemyCollision(bullet, enemy, false);
                 }
             },
@@ -100,8 +102,10 @@ export class MainScene extends Phaser.Scene {
         this.physics.add.overlap(
             this.bullets,
             this.bossEnemies,
-            (bullet: any, enemy: any) => {
-                if (bullet && enemy) {
+            (bullet: Phaser.GameObjects.GameObject | Phaser.Physics.Arcade.Body | Phaser.Physics.Arcade.StaticBody | Phaser.Tilemaps.Tile,
+             enemy: Phaser.GameObjects.GameObject | Phaser.Physics.Arcade.Body | Phaser.Physics.Arcade.StaticBody | Phaser.Tilemaps.Tile) => {
+                if (bullet instanceof Phaser.Physics.Arcade.Image && 
+                    enemy instanceof Phaser.Physics.Arcade.Sprite) {
                     this.handleBulletEnemyCollision(bullet, enemy, true);
                 }
             },
@@ -160,15 +164,16 @@ export class MainScene extends Phaser.Scene {
         }
 
         // Clean up bullets
-        this.bullets.getChildren().forEach((bullet: any) => {
-            if (bullet.y < -50) {
+        this.bullets.getChildren().forEach((bullet) => {
+            if (bullet instanceof Phaser.Physics.Arcade.Image && bullet.y < -50) {
                 bullet.destroy();
             }
         });
 
         // Clean up enemies
-        this.enemies.getChildren().forEach((enemy: any) => {
-            if (enemy.y > Number(this.game.config.height) + 50) {
+        this.enemies.getChildren().forEach((enemy) => {
+            if (enemy instanceof Phaser.Physics.Arcade.Sprite && 
+                enemy.y > Number(this.game.config.height) + 50) {
                 enemy.destroy();
             }
         });
