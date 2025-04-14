@@ -75,9 +75,9 @@ export class MainScene extends Phaser.Scene {
 
     preload() {
         // Load player ships
-        this.load.image('player', 'assets/skyforce_assets/PNG/playerShip3_blue.png');
-        this.load.image('player-damage1', 'assets/skyforce_assets/PNG/playerShip3_orange.png');
-        this.load.image('player-damage2', 'assets/skyforce_assets/PNG/playerShip3_red.png');
+        this.load.image('player', 'assets/skyforce_assets/PNG/Ships/ship1.png');
+        this.load.image('player-damage1', 'assets/skyforce_assets/PNG/Ships/ship1.png');  // We'll use tint for damage
+        this.load.image('player-damage2', 'assets/skyforce_assets/PNG/Ships/ship1.png');  // We'll use tint for damage
         
         // Load enemy ships
         this.load.image('enemy', 'assets/skyforce_assets/PNG/Enemies/enemyBlack1.png');
@@ -125,9 +125,10 @@ export class MainScene extends Phaser.Scene {
         this.cameras.main.setRoundPixels(true);
         
         // Create player with proper scale and physics
-        this.player = this.physics.add.sprite(400, 500, 'player');
+        this.player = this.physics.add.sprite(500, 600, 'player');  // Adjusted starting position for larger area
         this.player.setCollideWorldBounds(true);
-        this.player.setScale(0.6);
+        this.player.setScale(0.1);  // Made ship smaller
+        this.player.setAngle(0);  // No rotation needed - ship faces upward naturally
 
         // Setup input
         this.cursors = this.input.keyboard!.createCursorKeys();
@@ -738,19 +739,26 @@ export class MainScene extends Phaser.Scene {
         if (this.gameState.health <= 0) {
             this.gameOver();
         } else {
-            // Update player sprite based on damage
+            // Update player appearance based on damage using tint instead of texture swap
             if (this.gameState.health <= 30) {
-                this.player.setTexture('player-damage2');
+                this.player.setTint(0xff0000);  // Red tint for heavy damage
             } else if (this.gameState.health <= 60) {
-                this.player.setTexture('player-damage1');
-            } else if (this.gameState.health <= 80) {
-                this.player.setTexture('player');
+                this.player.setTint(0xff6666);  // Lighter red tint for medium damage
+            } else {
+                this.player.clearTint();  // No tint for healthy state
             }
             
             // Flash player
+            const currentTint = this.player.tintTopLeft;
             this.player.setTint(0xff0000);
             this.time.delayedCall(200, () => {
-                this.player.clearTint();
+                if (this.player.active) {
+                    if (currentTint === 0xffffff) {
+                        this.player.clearTint();
+                    } else {
+                        this.player.setTint(currentTint);
+                    }
+                }
             });
         }
     }
@@ -901,24 +909,31 @@ export class MainScene extends Phaser.Scene {
     }
 
     private handlePlayerDebrisHit() {
-        this.gameState.health = Math.max(0, this.gameState.health - 10);  // 10% damage from debris
+        this.gameState.health = Math.max(0, this.gameState.health - 10);
         
         if (this.gameState.health <= 0) {
             this.gameOver();
         } else {
-            // Update player sprite based on damage
+            // Update player appearance based on damage using tint
             if (this.gameState.health <= 30) {
-                this.player.setTexture('player-damage2');
+                this.player.setTint(0xff0000);  // Red tint for heavy damage
             } else if (this.gameState.health <= 60) {
-                this.player.setTexture('player-damage1');
-            } else if (this.gameState.health <= 80) {
-                this.player.setTexture('player');
+                this.player.setTint(0xff6666);  // Lighter red tint for medium damage
+            } else {
+                this.player.clearTint();  // No tint for healthy state
             }
             
             // Flash player
+            const currentTint = this.player.tintTopLeft;
             this.player.setTint(0xff0000);
             this.time.delayedCall(200, () => {
-                this.player.clearTint();
+                if (this.player.active) {
+                    if (currentTint === 0xffffff) {
+                        this.player.clearTint();
+                    } else {
+                        this.player.setTint(currentTint);
+                    }
+                }
             });
         }
     }
@@ -946,24 +961,31 @@ export class MainScene extends Phaser.Scene {
     }
 
     private handlePlayerWalkerHit() {
-        this.gameState.health = Math.max(0, this.gameState.health - 5);  // 5% damage from walker punch
+        this.gameState.health = Math.max(0, this.gameState.health - 5);
         
         if (this.gameState.health <= 0) {
             this.gameOver();
         } else {
-            // Update player sprite based on damage
+            // Update player appearance based on damage using tint
             if (this.gameState.health <= 30) {
-                this.player.setTexture('player-damage2');
+                this.player.setTint(0xff0000);  // Red tint for heavy damage
             } else if (this.gameState.health <= 60) {
-                this.player.setTexture('player-damage1');
-            } else if (this.gameState.health <= 80) {
-                this.player.setTexture('player');
+                this.player.setTint(0xff6666);  // Lighter red tint for medium damage
+            } else {
+                this.player.clearTint();  // No tint for healthy state
             }
             
             // Flash player
+            const currentTint = this.player.tintTopLeft;
             this.player.setTint(0xff0000);
             this.time.delayedCall(200, () => {
-                this.player.clearTint();
+                if (this.player.active) {
+                    if (currentTint === 0xffffff) {
+                        this.player.clearTint();
+                    } else {
+                        this.player.setTint(currentTint);
+                    }
+                }
             });
         }
     }

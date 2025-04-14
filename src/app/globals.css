@@ -1,8 +1,42 @@
 @import "tailwindcss";
 
+/* Hide Next.js development indicators */
+[data-nextjs-toast],
+[data-nextjs-focus-error],
+[data-nextjs-hydration-error] {
+    display: none !important;
+}
+
+/* Hide the Next.js logo at bottom */
+div:has(> svg path[d^="M120 80c0-26.51"]) {
+    display: none !important;
+}
+
+/* Target Next.js Vercel logo specifically */
+body > div:last-child {
+    display: none !important;
+}
+
+/* Ensure full height */
+html, body {
+    height: 100vh !important;
+    width: 100vw !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    overflow: hidden !important;
+}
+
+/* Game container styling */
+@media (min-width: 640px) {
+    .game-container {
+        box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5);
+        border: 1px solid #2d3748;
+    }
+}
+
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: #111827;
+  --foreground: #ffffff;
 }
 
 @theme inline {

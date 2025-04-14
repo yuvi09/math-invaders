@@ -46,7 +46,15 @@ export default function Game() {
                         width: 800,
                         height: 600
                     },
-                    scene: MainScene
+                    scene: MainScene,
+                    // Add render settings to help with WebGL issues
+                    render: {
+                        antialias: false,
+                        pixelArt: true,
+                        roundPixels: true,
+                        transparent: false,
+                        clearBeforeRender: true
+                    }
                 });
 
                 // Hide loading message when game starts
@@ -81,11 +89,11 @@ export default function Game() {
     return (
         <div 
             ref={gameRef}
-            className="w-full h-full bg-black rounded-lg flex items-center justify-center touch-none relative"
+            className="w-full h-full flex items-center justify-center bg-black"
             style={{ touchAction: 'none' }}
         >
             {isLoading && (
-                <div className="text-white text-xl absolute inset-0 flex items-center justify-center">
+                <div className="text-white text-xl absolute inset-0 flex items-center justify-center z-10">
                     Loading game...
                 </div>
             )}
