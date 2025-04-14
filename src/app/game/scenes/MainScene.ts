@@ -543,8 +543,7 @@ export class MainScene extends Phaser.Scene {
                     Math.sin(angle) * speed
                 );
                 
-                // Rotate walker to face movement direction (removed the PI/2 offset)
-                walker.setRotation(angle);
+                // Remove rotation - keep walker facing forward
             }
         });
 
@@ -702,6 +701,7 @@ export class MainScene extends Phaser.Scene {
             
             if (health <= 0) {
                 this.destroyEnemy(enemy, true);
+                this.spawnWalkerDebris(enemy.x, enemy.y);  // Spawn regular enemies on death
                 this.gameState.score += 200;  // Walker worth 200 points
             }
         } else {
@@ -965,6 +965,38 @@ export class MainScene extends Phaser.Scene {
             this.time.delayedCall(200, () => {
                 this.player.clearTint();
             });
+        }
+    }
+
+    private spawnWalkerDebris(x: number, y: number) {
+        const numEnemies = 4;  // Spawn 4 regular enemies
+        const spreadRadius = 50;  // Spread radius for spawned enemies
+
+        for (let i = 0; i < numEnemies; i++) {
+            const angle = (i * Math.PI * 2) / numEnemies;  // Evenly space enemies in a circle
+            const spawnX = x + Math.cos(angle) * spreadRadius;
+            const spawnY = y + Math.sin(angle) * spreadRadius;
+            
+            const enemy = this.enemies.create(spawnX, spawnY, 'enemy') as Phaser.Physics.Arcade.Sprite;
+            
+            if (enemy) {
+                enemy.setScale(0.5);  // Regular enemy scale
+                
+                // Set velocity based on spawn position (spread outward)
+                const speed = 150;
+                enemy.setVelocity(
+                    Math.cos(angle) * speed,
+                    Math.sin(angle) * speed
+                );
+
+                // Add a delayed downward velocity
+                this.time.delayedCall(500, () => {
+                    if (enemy.active) {
+                        const downwardSpeed = Phaser.Math.Between(100, 200);
+                        enemy.setVelocityY(downwardSpeed);
+                    }
+                });
+            }
         }
     }
 } 
