@@ -13,6 +13,7 @@ interface GameState {
     walkerSpawnRate: number;
     bossFight: boolean;
     bossHealth: number;
+    gameCompleted: boolean;
 }
 
 enum EnemyType {
@@ -55,7 +56,8 @@ export class MainScene extends Phaser.Scene {
         missileEnemySpawnRate: 12000, // 12 seconds initially
         walkerSpawnRate: 20000, // 20 seconds initially
         bossFight: false,
-        bossHealth: 100
+        bossHealth: 100,
+        gameCompleted: false
     };
 
     private lastShootTime: number = 0;
@@ -543,7 +545,7 @@ this.boss1 = this.physics.add.sprite(500, 500, 'boss1');
     }
 
     update(time: number, delta: number) {
-        if (this.gameState.isGameOver || this.gameState.isPaused) {
+        if (this.gameState.isGameOver || this.gameState.isPaused || this.gameState.gameCompleted) {
             return;
         }
 
@@ -569,7 +571,7 @@ this.boss1 = this.physics.add.sprite(500, 500, 'boss1');
         const timeMinutes = this.gameState.gameTime / 60000;
         
         // Check for boss spawn conditions
-        if (this.gameState.score >= 2500 && !this.gameState.bossFight) {
+        if (this.gameState.score >= 2500 && !this.gameState.bossFight && !this.gameState.gameCompleted) {
             // Clear all existing enemies before spawning boss
             this.enemies.clear(true, true);
             this.laserEnemies.clear(true, true);
@@ -944,6 +946,7 @@ this.boss1 = this.physics.add.sprite(500, 500, 'boss1');
         this.gameState.isGameOver = false;
         this.gameState.health = 100;
         this.gameState.gameTime = 0;
+        this.gameState.gameCompleted = false;
         
         this.enemies.clear(true, true);
         this.laserEnemies.clear(true, true);
@@ -952,6 +955,7 @@ this.boss1 = this.physics.add.sprite(500, 500, 'boss1');
         this.nukerEnemies.clear(true, true);
         this.enemyDebris.clear(true, true);
         this.walkerEnemies.clear(true, true);
+        this.enemyProjectiles.clear(true, true);
         
         this.scene.restart();
     }
@@ -1398,21 +1402,22 @@ this.boss1 = this.physics.add.sprite(500, 500, 'boss1');
             this.bossHealthBar.destroy();
             this.bossHealthText.destroy();
             
+            // Mark the game as completed
+            this.gameState.gameCompleted = true;
+            
             // Show stage completion message
-            const stageText = this.add.text(400, 300, 'Stage 1 Completed!\nMore challenges await...', {
+            const stageText = this.add.text(400, 300, 'Stage 1 Completed!\nYou Win!\n\nPress R to restart game', {
                 fontSize: '48px',
                 color: '#ffffff',
                 align: 'center'
             });
             stageText.setOrigin(0.5);
             
-            // Remove the message after 5 seconds
-            this.time.delayedCall(5000, () => {
-                stageText.destroy();
-            });
-            
             // End boss fight
             this.gameState.bossFight = false;
+            
+            // Clear all projectiles
+            this.enemyProjectiles.clear(true, true);
         }
     }
     
