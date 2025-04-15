@@ -104,7 +104,7 @@ export class MainScene extends Phaser.Scene {
 
     preload() {
         // Load background
-        this.load.image('background', 'assets/skyforce_assets/PNG/UI/Bg.png');
+        this.load.image('background', 'assets/skyforce_assets/PNG/UI/background_1.png');
         
         // Load player ships
         this.load.image('player', 'assets/skyforce_assets/PNG/Ships/ship1.png');
