@@ -14,6 +14,8 @@ interface GameState {
     bossFight: boolean;
     bossHealth: number;
     gameCompleted: boolean;
+    hasGuidedRockets: boolean;
+    lastRocketTime: number;
 }
 
 enum EnemyType {
@@ -59,7 +61,9 @@ export class MainScene extends Phaser.Scene {
         walkerSpawnRate: 20000, // 20 seconds initially
         bossFight: false,
         bossHealth: 100,
-        gameCompleted: false
+        gameCompleted: false,
+        hasGuidedRockets: false,
+        lastRocketTime: 0
     };
 
     private lastShootTime: number = 0;
@@ -584,8 +588,37 @@ this.boss1 = this.physics.add.sprite(500, 500, 'boss1');
         // Calculate spawn delays based on game time
         const timeMinutes = this.gameState.gameTime / 60000;
         
+        // Check for guided rocket power-up
+        if (this.gameState.score >= 15000 && !this.gameState.hasGuidedRockets) {
+            this.gameState.hasGuidedRockets = true;
+            
+            // Display power-up message
+            const powerupText = this.add.text(400, 300, 'POWER UP: GUIDED ROCKETS ACQUIRED!', {
+                fontSize: '24px',
+                color: '#ffff00',
+                align: 'center'
+            });
+            powerupText.setOrigin(0.5);
+            
+            // Flash the text for visibility
+            this.tweens.add({
+                targets: powerupText,
+                alpha: 0,
+                duration: 500,
+                ease: 'Power2',
+                yoyo: true,
+                repeat: 3,
+                onComplete: () => {
+                    powerupText.destroy();
+                }
+            });
+            
+            // Play power-up sound
+            this.bossExplosionSound.play({ volume: 0.3 });
+        }
+        
         // Check for boss spawn conditions
-        if (this.gameState.score >= 2500 && !this.gameState.bossFight && !this.gameState.gameCompleted) {
+        if (this.gameState.score >= 20000 && !this.gameState.bossFight && !this.gameState.gameCompleted) {
             // Clear all existing enemies before spawning boss
             this.enemies.clear(true, true);
             this.laserEnemies.clear(true, true);
@@ -765,6 +798,17 @@ this.boss1 = this.physics.add.sprite(500, 500, 'boss1');
             if (bullet) {
                 bullet.setVelocityY(-400);
                 bullet.setScale(0.5);
+            }
+        }
+        
+        // Fire guided rockets if we have them and it's time
+        if (this.gameState.hasGuidedRockets) {
+            const currentTime = this.time.now;
+            
+            // Fire rockets every 2 seconds (2000ms)
+            if (currentTime > this.gameState.lastRocketTime + 2000) {
+                this.fireGuidedRockets();
+                this.gameState.lastRocketTime = currentTime;
             }
         }
     }
@@ -1177,7 +1221,7 @@ this.boss1 = this.physics.add.sprite(500, 500, 'boss1');
 
     private spawnFirecrackerBoss() {
         this.gameState.bossFight = true;
-        this.bossHealth = 200;
+        this.bossHealth = 300; // Increased from 200 to 300
 
         const boss = this.bossEnemies.create(
             this.game.config.width as number / 2,
@@ -1204,7 +1248,37 @@ this.boss1 = this.physics.add.sprite(500, 500, 'boss1');
                 targets: boss,
                 y: 100,
                 duration: 2000,
-                ease: 'Power2'
+                ease: 'Power2',
+                onComplete: () => {
+                    // Add left-right hovering movement after entry animation completes
+                    this.tweens.add({
+                        targets: boss,
+                        x: this.game.config.width as number - 100, // Move to right side with margin
+                        duration: 3000,
+                        ease: 'Sine.easeInOut',
+                        yoyo: true, // Move back to start
+                        repeat: -1, // Loop forever
+                        repeatDelay: 500 // Pause at each end
+                    });
+                }
+            });
+
+            // Increase attack frequency and add evasive movement
+            this.time.addEvent({
+                delay: 500,
+                callback: () => {
+                    if (boss.active && Math.random() < 0.1) { // 10% chance per check
+                        // Evasive movement
+                        const randomY = Phaser.Math.Between(80, 150);
+                        this.tweens.add({
+                            targets: boss,
+                            y: randomY,
+                            duration: 1000,
+                            ease: 'Sine.easeInOut'
+                        });
+                    }
+                },
+                loop: true
             });
 
             // 1. Spread laser attack
@@ -1380,10 +1454,10 @@ this.boss1 = this.physics.add.sprite(500, 500, 'boss1');
         this.bossHealthBar.fillStyle(0xff0000);
         this.bossHealthBar.fillRect(10, 30, 25, 20);
 
-        // Draw health (green) - calculate percentage based on 200 max health
-        const healthPercentage = (this.bossHealth / 200) * 100;
+        // Draw health (green) - calculate percentage based on 300 max health
+        const healthPercentage = (this.bossHealth / 300) * 100;
         this.bossHealthBar.fillStyle(0x00ff00);
-        this.bossHealthBar.fillRect(10, 30, (this.bossHealth / 200) * 25, 20);
+        this.bossHealthBar.fillRect(10, 30, (this.bossHealth / 300) * 25, 20);
 
         // Update text with percentage
         this.bossHealthText.setText(`Boss Health: ${Math.round(healthPercentage)}%`);
@@ -1394,8 +1468,14 @@ this.boss1 = this.physics.add.sprite(500, 500, 'boss1');
         
         bullet.destroy();
         
-        // Reduce boss health by 2 (100 hits to defeat)
-        this.bossHealth = Math.max(0, this.bossHealth - 2);
+        // Check if this is a guided rocket
+        const isGuided = (bullet as Phaser.Physics.Arcade.Image).getData('guided');
+        
+        // Guided rockets deal more damage
+        const damage = isGuided ? 5 : 2;
+        
+        // Reduce boss health
+        this.bossHealth = Math.max(0, this.bossHealth - damage);
         this.updateBossHealthBar();
 
         // Create hit effect at boss position
@@ -1511,6 +1591,137 @@ this.boss1 = this.physics.add.sprite(500, 500, 'boss1');
         effect.play('explosion');
         effect.once('animationcomplete', () => {
             effect.destroy();
+        });
+    }
+
+    private fireGuidedRockets() {
+        // Create two rockets, one on each side of the player
+        const rocketPositions = [
+            { x: this.player.x - 20, y: this.player.y - 10 },
+            { x: this.player.x + 20, y: this.player.y - 10 }
+        ];
+        
+        rocketPositions.forEach(pos => {
+            const rocket = this.bullets.create(pos.x, pos.y, 'guided-missile') as Phaser.Physics.Arcade.Image;
+            
+            if (rocket) {
+                rocket.setScale(0.6);
+                rocket.setVelocityY(-300); // Initial upward velocity
+                rocket.setData('guided', true);
+                
+                // Find the closest enemy to target
+                let closestEnemy = this.findClosestEnemy(pos.x, pos.y);
+                
+                // If we found a target, start guided behavior
+                if (closestEnemy) {
+                    this.guideMissileToTarget(rocket, closestEnemy);
+                }
+            }
+        });
+        
+        // Play rocket launch sound
+        this.laserSound.play({ volume: 0.4, detune: -300 });
+    }
+    
+    private findClosestEnemy(x: number, y: number): Phaser.Physics.Arcade.Sprite | null {
+        // Get all alive enemies from different groups
+        const allEnemies = [
+            ...this.enemies.getChildren(),
+            ...this.laserEnemies.getChildren(),
+            ...this.missileEnemies.getChildren(),
+            ...this.nukerEnemies.getChildren(),
+            ...this.walkerEnemies.getChildren(),
+            ...this.bossEnemies.getChildren()
+        ];
+        
+        if (allEnemies.length === 0) return null;
+        
+        // Find the closest one
+        let closest = null;
+        let closestDistance = Number.MAX_VALUE;
+        
+        allEnemies.forEach(enemy => {
+            if (enemy instanceof Phaser.Physics.Arcade.Sprite && enemy.active) {
+                const distance = Phaser.Math.Distance.Between(x, y, enemy.x, enemy.y);
+                if (distance < closestDistance) {
+                    closest = enemy;
+                    closestDistance = distance;
+                }
+            }
+        });
+        
+        return closest as Phaser.Physics.Arcade.Sprite | null;
+    }
+    
+    private guideMissileToTarget(missile: Phaser.Physics.Arcade.Image, target: Phaser.Physics.Arcade.Sprite) {
+        // Create a repeating event to update missile direction
+        this.time.addEvent({
+            delay: 200, // Update path 5 times per second
+            callback: () => {
+                if (!missile.active || !target.active || !missile.body) return;
+                
+                // Calculate angle to target
+                const angle = Phaser.Math.Angle.Between(
+                    missile.x, missile.y,
+                    target.x, target.y
+                );
+                
+                // Set missile rotation to match direction
+                missile.setRotation(angle + Math.PI/2);
+                
+                // Get current speed
+                const currentVel = new Phaser.Math.Vector2(missile.body.velocity.x, missile.body.velocity.y);
+                const currentSpeed = currentVel.length();
+                
+                // Limited turning ability - gradually adjust course
+                const maxTurn = 0.1;
+                let angleDiff = Phaser.Math.Angle.Wrap(angle - currentVel.angle());
+                
+                // Limit maximum turn angle
+                if (angleDiff > maxTurn) angleDiff = maxTurn;
+                if (angleDiff < -maxTurn) angleDiff = -maxTurn;
+                
+                // Calculate new heading
+                const newAngle = currentVel.angle() + angleDiff;
+                
+                // Apply new velocity (maintaining speed)
+                const speed = Math.max(currentSpeed, 300); // Ensure minimum speed
+                missile.body.velocity.x = Math.cos(newAngle) * speed;
+                missile.body.velocity.y = Math.sin(newAngle) * speed;
+                
+                // Find a new target if current is destroyed
+                if (!target.active) {
+                    const newTarget = this.findClosestEnemy(missile.x, missile.y);
+                    if (newTarget) {
+                        target = newTarget;
+                    }
+                }
+            },
+            repeat: 20 // Track for ~4 seconds
+        });
+        
+        // Add a trail effect
+        this.time.addEvent({
+            delay: 100,
+            callback: () => {
+                if (missile.active) {
+                    const trail = this.add.sprite(missile.x, missile.y, 'fire00');
+                    trail.setScale(0.3);
+                    trail.alpha = 0.6;
+                    
+                    // Fade out and destroy the trail
+                    this.tweens.add({
+                        targets: trail,
+                        alpha: 0,
+                        scale: 0.1,
+                        duration: 300,
+                        onComplete: () => {
+                            trail.destroy();
+                        }
+                    });
+                }
+            },
+            repeat: 40
         });
     }
 } 
