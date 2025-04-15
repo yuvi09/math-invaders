@@ -1159,7 +1159,7 @@ this.boss1 = this.physics.add.sprite(500, 500, 'boss1');
 
     private spawnFirecrackerBoss() {
         this.gameState.bossFight = true;
-        this.bossHealth = 200; // Changed from 1000 to 200
+        this.bossHealth = 200;
 
         const boss = this.bossEnemies.create(
             this.game.config.width as number / 2,
@@ -1189,9 +1189,9 @@ this.boss1 = this.physics.add.sprite(500, 500, 'boss1');
                 ease: 'Power2'
             });
 
-            // Add boss attack patterns
+            // 1. Spread laser attack
             this.time.addEvent({
-                delay: 2000,
+                delay: 3000,
                 callback: () => {
                     if (boss.active) {
                         // Fire multiple projectiles in a spread pattern
@@ -1214,6 +1214,134 @@ this.boss1 = this.physics.add.sprite(500, 500, 'boss1');
                                 );
                                 projectile.setData('damage', 15);
                             }
+                        }
+                        this.laserSound.play({ volume: 0.3 });
+                    }
+                },
+                loop: true
+            });
+            
+            // 2. Homing missile attack
+            this.time.addEvent({
+                delay: 5000,
+                callback: () => {
+                    if (boss.active && this.player.active) {
+                        const missile = this.enemyProjectiles.create(
+                            boss.x,
+                            boss.y + 20,
+                            'boss-missile'
+                        ) as Phaser.Physics.Arcade.Image;
+                        
+                        if (missile) {
+                            missile.setScale(0.8);
+                            missile.setData('missile', true);
+                            
+                            // Calculate angle to player
+                            const angle = Phaser.Math.Angle.Between(
+                                boss.x, boss.y,
+                                this.player.x, this.player.y
+                            );
+                            missile.setRotation(angle + Math.PI/2);
+                            
+                            // Set initial velocity
+                            const speed = 250;
+                            missile.setVelocity(
+                                Math.cos(angle) * speed,
+                                Math.sin(angle) * speed
+                            );
+                            missile.setData('damage', 25);
+                            
+                            // Add homing behavior
+                            this.time.addEvent({
+                                delay: 200,
+                                callback: () => {
+                                    if (missile.active && this.player.active) {
+                                        // Calculate new angle to player
+                                        const newAngle = Phaser.Math.Angle.Between(
+                                            missile.x, missile.y,
+                                            this.player.x, this.player.y
+                                        );
+                                        missile.setRotation(newAngle + Math.PI/2);
+                                        
+                                        // Update velocity with limited turning
+                                        if (missile.body) {
+                                            const currentVel = new Phaser.Math.Vector2(missile.body.velocity.x, missile.body.velocity.y);
+                                            const currentSpeed = currentVel.length();
+                                            
+                                            // Limit turning angle
+                                            const maxTurn = 0.05; // radians
+                                            let angleDiff = Phaser.Math.Angle.Wrap(newAngle - currentVel.angle());
+                                            if (angleDiff > maxTurn) angleDiff = maxTurn;
+                                            if (angleDiff < -maxTurn) angleDiff = -maxTurn;
+                                            
+                                            const adjustedAngle = currentVel.angle() + angleDiff;
+                                            missile.body.velocity.x = Math.cos(adjustedAngle) * currentSpeed;
+                                            missile.body.velocity.y = Math.sin(adjustedAngle) * currentSpeed;
+                                        }
+                                    }
+                                },
+                                repeat: 20
+                            });
+                        }
+                        this.laserSound.play({ volume: 0.3 });
+                    }
+                },
+                loop: true
+            });
+            
+            // 3. Nuker-style explosive debris
+            this.time.addEvent({
+                delay: 7000,
+                callback: () => {
+                    if (boss.active) {
+                        // Create bomb
+                        const bomb = this.enemyProjectiles.create(
+                            boss.x,
+                            boss.y + 20,
+                            'boss-bomb'
+                        ) as Phaser.Physics.Arcade.Image;
+                        
+                        if (bomb) {
+                            bomb.setScale(0.8);
+                            bomb.setVelocityY(200);
+                            bomb.setData('isBomb', true);
+                            
+                            // Make bomb explode after 1.5 seconds
+                            this.time.delayedCall(1500, () => {
+                                if (bomb.active) {
+                                    // Create explosion effect
+                                    const explosion = this.add.sprite(bomb.x, bomb.y, 'explosion1');
+                                    explosion.play('explosion');
+                                    explosion.once('animationcomplete', () => {
+                                        explosion.destroy();
+                                    });
+                                    
+                                    // Create debris in all directions
+                                    for (let i = 0; i < 8; i++) {
+                                        const debris = this.enemyProjectiles.create(
+                                            bomb.x, bomb.y, 'debris'
+                                        ) as Phaser.Physics.Arcade.Image;
+                                        
+                                        if (debris) {
+                                            const angle = (i * Math.PI * 2) / 8;
+                                            const speed = 200;
+                                            
+                                            debris.setScale(0.6);
+                                            debris.setVelocity(
+                                                Math.cos(angle) * speed,
+                                                Math.sin(angle) * speed
+                                            );
+                                            debris.setData('damage', 10);
+                                        }
+                                    }
+                                    
+                                    // Play explosion sound
+                                    this.explosionSound.play();
+                                    
+                                    // Destroy the bomb
+                                    bomb.destroy();
+                                }
+                            });
                         }
                     }
                 },
@@ -1258,23 +1386,11 @@ this.boss1 = this.physics.add.sprite(500, 500, 'boss1');
 
         // Check if boss is defeated
         if (this.bossHealth <= 0) {
-            // Create multiple explosion effects
-            for (let i = 0; i < 8; i++) {
-                const x = bossSprite.x + Phaser.Math.Between(0, bossSprite.width);
-                const y = bossSprite.y + Phaser.Math.Between(0, bossSprite.height);
-                const explosion = this.add.sprite(x, y, 'explosion1');
-                explosion.setScale(Phaser.Math.FloatBetween(0.3, 0.8));
-                explosion.play('explosion');
-                explosion.once('animationcomplete', () => {
-                    explosion.destroy();
-                });
-            }
-
-            // Play boss explosion sound
-            this.bossExplosionSound.play();
-
+            // Create epic explosion sequence
+            this.createBossDestructionSequence(bossSprite);
+            
             // Add score
-            this.gameState.score += 10000; // Increased reward
+            this.gameState.score += 10000;
             this.scoreText.setText(`Score: ${this.gameState.score}`);
 
             // Remove boss and health bar
@@ -1298,6 +1414,76 @@ this.boss1 = this.physics.add.sprite(500, 500, 'boss1');
             // End boss fight
             this.gameState.bossFight = false;
         }
+    }
+    
+    private createBossDestructionSequence(boss: Phaser.Physics.Arcade.Sprite) {
+        // Create multiple explosion waves
+        for (let wave = 0; wave < 3; wave++) {
+            this.time.delayedCall(wave * 500, () => {
+                // Create several explosions per wave
+                for (let i = 0; i < 5; i++) {
+                    const offsetX = Phaser.Math.Between(-boss.width/2, boss.width/2);
+                    const offsetY = Phaser.Math.Between(-boss.height/2, boss.height/2);
+                    
+                    const x = boss.x + offsetX;
+                    const y = boss.y + offsetY;
+                    
+                    // Create explosion effect
+                    const explosion = this.add.sprite(x, y, 'explosion1');
+                    explosion.setScale(Phaser.Math.FloatBetween(0.4, 1.0));
+                    explosion.play('explosion');
+                    explosion.once('animationcomplete', () => {
+                        explosion.destroy();
+                    });
+                }
+                
+                // Play explosion sound with increasing volume
+                this.bossExplosionSound.play({ 
+                    volume: 0.3 + (wave * 0.2)
+                });
+            });
+        }
+        
+        // Create final massive explosion
+        this.time.delayedCall(1500, () => {
+            // Create central explosion
+            const finalExplosion = this.add.sprite(boss.x, boss.y, 'explosion1');
+            finalExplosion.setScale(2.0);
+            finalExplosion.play('explosion');
+            finalExplosion.once('animationcomplete', () => {
+                finalExplosion.destroy();
+            });
+            
+            // Create debris pieces flying outward
+            for (let i = 0; i < 12; i++) {
+                const angle = (i * Math.PI * 2) / 12;
+                const distance = Phaser.Math.Between(30, 100);
+                
+                const x = boss.x + Math.cos(angle) * distance;
+                const y = boss.y + Math.sin(angle) * distance;
+                
+                const debris = this.add.sprite(x, y, 'fire00');
+                debris.setScale(0.6);
+                
+                // Make debris fly outward
+                this.tweens.add({
+                    targets: debris,
+                    x: x + Math.cos(angle) * 200,
+                    y: y + Math.sin(angle) * 200,
+                    alpha: 0,
+                    duration: 1000,
+                    onComplete: () => {
+                        debris.destroy();
+                    }
+                });
+            }
+            
+            // Play final explosion sound
+            this.bossExplosionSound.play({ volume: 1.0 });
+            
+            // Screen shake effect
+            this.cameras.main.shake(500, 0.025);
+        });
     }
 
     private createHitEffect(x: number, y: number) {
