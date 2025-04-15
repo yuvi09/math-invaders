@@ -44,6 +44,8 @@ export class MainScene extends Phaser.Scene {
     private scoreText!: Phaser.GameObjects.Text;
     private healthText!: Phaser.GameObjects.Text;
     private pauseText!: Phaser.GameObjects.Text;
+    private background!: Phaser.GameObjects.TileSprite;
+    private bgSpeed: number = 1;
     private gameState: GameState = {
         score: 0,
         isPaused: false,
@@ -101,6 +103,9 @@ export class MainScene extends Phaser.Scene {
     }
 
     preload() {
+        // Load background
+        this.load.image('background', 'assets/skyforce_assets/PNG/UI/Bg.png');
+        
         // Load player ships
         this.load.image('player', 'assets/skyforce_assets/PNG/Ships/ship1.png');
         this.load.image('player-damage1', 'assets/skyforce_assets/PNG/Ships/ship1.png');  // We'll use tint for damage
@@ -161,6 +166,12 @@ export class MainScene extends Phaser.Scene {
     }
 
     create() {
+        // Create scrolling background
+        const gameWidth = this.game.config.width as number;
+        const gameHeight = this.game.config.height as number;
+        this.background = this.add.tileSprite(0, 0, gameWidth, gameHeight, 'background');
+        this.background.setOrigin(0, 0);
+        
         // Enable crisp pixels for pixel art
         this.cameras.main.setRoundPixels(true);
         
@@ -549,6 +560,9 @@ this.boss1 = this.physics.add.sprite(500, 500, 'boss1');
             return;
         }
 
+        // Scroll background to create flying through space effect
+        this.background.tilePositionY -= this.bgSpeed;
+        
         // Update game time
         this.gameState.gameTime += delta;
 
