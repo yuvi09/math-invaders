@@ -7,6 +7,12 @@ interface GameState {
     isGameOver: boolean;
     health: number;
     gameTime: number;
+    nukerSpawnTimer: number;
+    laserEnemySpawnRate: number;
+    missileEnemySpawnRate: number;
+    walkerSpawnRate: number;
+    bossFight: boolean;
+    bossHealth: number;
 }
 
 enum EnemyType {
@@ -43,7 +49,13 @@ export class MainScene extends Phaser.Scene {
         firepower: 1,
         isGameOver: false,
         health: 100,
-        gameTime: 0
+        gameTime: 0,
+        nukerSpawnTimer: 0,
+        laserEnemySpawnRate: 15000, // 15 seconds initially
+        missileEnemySpawnRate: 12000, // 12 seconds initially
+        walkerSpawnRate: 20000, // 20 seconds initially
+        bossFight: false,
+        bossHealth: 100
     };
 
     private lastShootTime: number = 0;
@@ -68,6 +80,19 @@ export class MainScene extends Phaser.Scene {
     private shootSound!: Phaser.Sound.BaseSound;
     private explosionSound!: Phaser.Sound.BaseSound;
     private bossExplosionSound!: Phaser.Sound.BaseSound;
+    private firecrackerSound!: Phaser.Sound.BaseSound;
+
+    private bossEnemies!: Phaser.Physics.Arcade.Group;
+    private enemyProjectiles!: Phaser.Physics.Arcade.Group;
+    private debris!: Phaser.Physics.Arcade.Group;
+    private gameOverText!: Phaser.GameObjects.Text;
+    private restartText!: Phaser.GameObjects.Text;
+    private touchInput = { x: 0, y: 0, isDown: false };
+    private laserSound!: Phaser.Sound.BaseSound;
+    private isPaused = false;
+    private bossHealth: number = 100;
+    private bossHealthBar!: Phaser.GameObjects.Graphics;
+    private bossHealthText!: Phaser.GameObjects.Text;
 
     constructor() {
         super({ key: 'MainScene' });
@@ -80,22 +105,34 @@ export class MainScene extends Phaser.Scene {
         this.load.image('player-damage2', 'assets/skyforce_assets/PNG/Ships/ship1.png');  // We'll use tint for damage
         
         // Load enemy ships
-        this.load.image('enemy', 'assets/skyforce_assets/PNG/Enemies/enemyBlack1.png');
-        this.load.image('laser-enemy', 'assets/skyforce_assets/PNG/Enemies/enemyRed2.png');
-        this.load.image('missile-enemy', 'assets/skyforce_assets/PNG/Enemies/enemyBlue2.png');
-        this.load.image('nuker-enemy', 'assets/skyforce_assets/PNG/Enemies/enemyGreen3.png');
-        this.load.image('walker-enemy', 'assets/skyforce_assets/PNG/Enemies/enemyBlack3.png');  // Updated path to match asset structure
+        this.load.image('enemy', 'assets/skyforce_assets/PNG/Enemies/enemyRed1.png');
+        this.load.image('laser-enemy', 'assets/skyforce_assets/PNG/Enemies/enemyBlue3.png');
+        this.load.image('missile-enemy', 'assets/skyforce_assets/PNG/Enemies/enemyBlack3.png');
+        this.load.image('nuker-enemy', 'assets/skyforce_assets/PNG/Enemies/enemyGreen5.png');
+        this.load.image('walker-enemy', 'assets/skyforce_assets/PNG/Enemies/enemyBlack3.png');
+        
+        // Load boss ships
+        this.load.image('boss1', 'assets/skyforce_assets/PNG/Ships/boss1.png');
+        this.load.image('firecracker-boss', 'assets/skyforce_assets/PNG/Ships/firecracker_ship.png');
         
         // Load projectiles
-        this.load.image('bullet', 'assets/skyforce_assets/PNG/Lasers/laserBlue07.png');
+        this.load.image('bullet', 'assets/skyforce_assets/PNG/Lasers/laserBlue01.png');
         this.load.image('enemy-laser', 'assets/skyforce_assets/PNG/Lasers/laserRed01.png');
-        this.load.image('enemy-missile', 'assets/skyforce_assets/PNG/Lasers/laserBlue16.png');
+        this.load.image('guided-missile', 'assets/skyforce_assets/PNG/Lasers/laserRed08.png'); 
         this.load.image('debris', 'assets/skyforce_assets/PNG/Lasers/laserGreen14.png');
+        this.load.image('boss-laser', 'assets/skyforce_assets/PNG/Lasers/laserRed16.png');
+        this.load.image('boss-missile', 'assets/skyforce_assets/PNG/Lasers/laserRed09.png');
+        this.load.image('boss-bomb', 'assets/skyforce_assets/PNG/Lasers/laserRed10.png');
         
         // Load effects
         for (let i = 0; i <= 19; i++) {
             const num = i.toString().padStart(2, '0');
             this.load.image(`fire${num}`, `assets/skyforce_assets/PNG/Effects/fire${num}.png`);
+        }
+
+        // Load explosion frames
+        for (let i = 1; i <= 5; i++) {
+            this.load.image(`explosion${i}`, `assets/skyforce_assets/PNG/Effects/explosion${i}.png`);
         }
         
         // Load shield effects
@@ -107,6 +144,7 @@ export class MainScene extends Phaser.Scene {
         this.load.audio('shoot', 'assets/sounds/laser1.wav');
         this.load.audio('explosion', 'assets/sounds/explosion.wav');
         this.load.audio('boss-explosion', 'assets/sounds/boss-explosion.wav');
+        this.load.audio('firecracker-sound', 'assets/sounds/Firecracker_sound.m4a');
 
         // Add load complete callback
         this.load.on('complete', () => {
@@ -207,8 +245,14 @@ export class MainScene extends Phaser.Scene {
 
         // Create explosion animation
         this.anims.create({
-            key: 'explode',
-            frames: this.anims.generateFrameNumbers('explosion', { start: 0, end: 8 }),
+            key: 'explosion',
+            frames: [
+                { key: 'explosion1' },
+                { key: 'explosion2' },
+                { key: 'explosion3' },
+                { key: 'explosion4' },
+                { key: 'explosion5' }
+            ],
             frameRate: 15,
             repeat: 0
         });
@@ -263,6 +307,8 @@ export class MainScene extends Phaser.Scene {
             runChildUpdate: true
         });
 
+        this.bossEnemies = this.physics.add.group();
+
         this.explosions = this.add.group();
 
         // Add collisions
@@ -293,6 +339,14 @@ export class MainScene extends Phaser.Scene {
             undefined,
             this
         );
+
+        //Add the enemmy boss1 here
+/*
+
+this.boss1 = this.physics.add.sprite(500, 500, 'boss1');
+
+*/
+
 
         // Add collisions for missile enemies
         this.physics.add.overlap(
@@ -423,6 +477,69 @@ export class MainScene extends Phaser.Scene {
         this.shootSound = this.sound.add('shoot', { volume: 0.3 });
         this.explosionSound = this.sound.add('explosion', { volume: 0.3 });
         this.bossExplosionSound = this.sound.add('boss-explosion', { volume: 0.3 });
+        this.firecrackerSound = this.sound.add('firecracker-sound', { volume: 0.3 });
+        this.laserSound = this.shootSound; // Use the shoot sound for laser sound
+
+        // Setup collisions for bosses
+        this.physics.add.overlap(this.bullets, this.bossEnemies, (bullet, boss) => {
+            this.handleBulletBossCollision(bullet as Phaser.Physics.Arcade.Image, boss as Phaser.Physics.Arcade.Sprite);
+        });
+        
+        this.physics.add.overlap(this.player, this.bossEnemies, () => {
+            this.gameOver();
+        });
+        
+        // Setup collision for enemy projectiles
+        this.enemyProjectiles = this.physics.add.group({
+            classType: Phaser.Physics.Arcade.Image,
+            maxSize: 30
+        });
+        
+        this.physics.add.overlap(
+            this.player,
+            this.enemyProjectiles,
+            (player, projectile) => {
+                if (projectile instanceof Phaser.Physics.Arcade.Image) {
+                    const damage = projectile.getData('damage') || 15;
+                    this.gameState.health = Math.max(0, this.gameState.health - damage);
+                    projectile.destroy();
+                    
+                    // Play hit sound
+                    this.explosionSound.play({ volume: 0.2 });
+                    
+                    // Update health text
+                    this.healthText.setText(`Health: ${this.gameState.health}%`);
+                    
+                    if (this.gameState.health <= 0) {
+                        this.gameOver();
+                    } else {
+                        // Flash player
+                        this.player.setTint(0xff0000);
+                        this.time.delayedCall(200, () => {
+                            if (this.player.active) {
+                                this.player.clearTint();
+                            }
+                        });
+                    }
+                }
+            },
+            undefined,
+            this
+        );
+
+        // Create explosion animation
+        this.anims.create({
+            key: 'explosion',
+            frames: [
+                { key: 'explosion1' },
+                { key: 'explosion2' },
+                { key: 'explosion3' },
+                { key: 'explosion4' },
+                { key: 'explosion5' }
+            ],
+            frameRate: 15,
+            repeat: 0
+        });
     }
 
     update(time: number, delta: number) {
@@ -451,24 +568,63 @@ export class MainScene extends Phaser.Scene {
         // Calculate spawn delays based on game time
         const timeMinutes = this.gameState.gameTime / 60000;
         
-        // Regular enemies spawn faster over time (starts at 2000ms, minimum 500ms)
-        const baseEnemySpawnDelay = Math.max(500, 2000 - Math.floor(timeMinutes) * 150);
-        if (time > this.lastEnemySpawnTime + baseEnemySpawnDelay) {
-            this.spawnEnemy();
-            this.lastEnemySpawnTime = time;
+        // Check for boss spawn conditions
+        if (this.gameState.score >= 2500 && !this.gameState.bossFight) {
+            // Clear all existing enemies before spawning boss
+            this.enemies.clear(true, true);
+            this.laserEnemies.clear(true, true);
+            this.missileEnemies.clear(true, true);
+            this.nukerEnemies.clear(true, true);
+            this.walkerEnemies.clear(true, true);
+            this.enemyLasers.clear(true, true);
+            this.enemyMissiles.clear(true, true);
+            this.enemyDebris.clear(true, true);
             
-            // Chance to spawn additional enemies increases with time
-            const extraSpawnChance = Math.min(0.5, timeMinutes * 0.05);
-            if (Math.random() < extraSpawnChance) {
-                this.spawnEnemy();
-            }
+            this.spawnFirecrackerBoss();
         }
 
-        // Laser enemies spawn more frequently (starts at 15000ms, minimum 5000ms)
-        const laserEnemySpawnRate = Math.max(5000, 15000 - Math.floor(timeMinutes) * 1000);
-        if (time > this.lastLaserEnemySpawnTime + laserEnemySpawnRate) {
-            this.spawnLaserEnemy();
-            this.lastLaserEnemySpawnTime = time;
+        // Only spawn regular enemies if not in boss fight
+        if (!this.gameState.bossFight) {
+            // Regular enemies spawn faster over time (starts at 2000ms, minimum 500ms)
+            const baseEnemySpawnDelay = Math.max(500, 2000 - Math.floor(timeMinutes) * 150);
+            if (time > this.lastEnemySpawnTime + baseEnemySpawnDelay) {
+                this.spawnEnemy();
+                this.lastEnemySpawnTime = time;
+                
+                // Chance to spawn additional enemies increases with time
+                const extraSpawnChance = Math.min(0.5, timeMinutes * 0.05);
+                if (Math.random() < extraSpawnChance) {
+                    this.spawnEnemy();
+                }
+            }
+
+            // Laser enemies spawn more frequently (starts at 15000ms, minimum 5000ms)
+            const laserEnemySpawnRate = Math.max(5000, 15000 - Math.floor(timeMinutes) * 1000);
+            if (time > this.lastLaserEnemySpawnTime + laserEnemySpawnRate) {
+                this.spawnLaserEnemy();
+                this.lastLaserEnemySpawnTime = time;
+            }
+
+            // Missile enemies spawn more frequently (starts at 12000ms, minimum 6000ms)
+            const missileEnemySpawnRate = Math.max(6000, 12000 - Math.floor(timeMinutes) * 600);
+            if (time > this.lastMissileEnemySpawnTime + missileEnemySpawnRate) {
+                this.spawnMissileEnemy();
+                this.lastMissileEnemySpawnTime = time;
+            }
+
+            // Nuker enemies spawn more frequently (starts at 20000ms, minimum 10000ms)
+            const nukerSpawnRate = Math.max(10000, 20000 - Math.floor(timeMinutes) * 1000);
+            if (time > this.lastNukerSpawnTime + nukerSpawnRate) {
+                this.spawnNukerEnemy();
+                this.lastNukerSpawnTime = time;
+            }
+
+            // Walker enemies spawn in groups (starts at 15000ms, minimum 8000ms)
+            const walkerSpawnRate = Math.max(8000, 15000 - Math.floor(timeMinutes) * 700);
+            if (time > this.lastWalkerSpawnTime + walkerSpawnRate) {
+                this.spawnWalkerGroup();
+                this.lastWalkerSpawnTime = time;
+            }
         }
 
         // Laser enemies shoot faster (starts at 2000ms, minimum 500ms)
@@ -492,13 +648,6 @@ export class MainScene extends Phaser.Scene {
             this.lastLaserShootTime = time;
         }
 
-        // Missile enemies spawn more frequently (starts at 12000ms, minimum 6000ms)
-        const missileEnemySpawnRate = Math.max(6000, 12000 - Math.floor(timeMinutes) * 600);
-        if (time > this.lastMissileEnemySpawnTime + missileEnemySpawnRate) {
-            this.spawnMissileEnemy();
-            this.lastMissileEnemySpawnTime = time;
-        }
-
         // Missile enemies shoot more frequently (starts at 3000ms, minimum 1500ms)
         const missileShootRate = Math.max(1500, 3000 - Math.floor(timeMinutes) * 150);
         if (time > this.lastMissileShootTime + missileShootRate) {
@@ -508,20 +657,6 @@ export class MainScene extends Phaser.Scene {
                 }
             });
             this.lastMissileShootTime = time;
-        }
-
-        // Nuker enemies spawn more frequently (starts at 20000ms, minimum 10000ms)
-        const nukerSpawnRate = Math.max(10000, 20000 - Math.floor(timeMinutes) * 1000);
-        if (time > this.lastNukerSpawnTime + nukerSpawnRate) {
-            this.spawnNukerEnemy();
-            this.lastNukerSpawnTime = time;
-        }
-
-        // Walker enemies spawn in groups (starts at 15000ms, minimum 8000ms)
-        const walkerSpawnRate = Math.max(8000, 15000 - Math.floor(timeMinutes) * 700);
-        if (time > this.lastWalkerSpawnTime + walkerSpawnRate) {
-            this.spawnWalkerGroup();
-            this.lastWalkerSpawnTime = time;
         }
 
         // Update walker enemies movement
@@ -1020,5 +1155,157 @@ export class MainScene extends Phaser.Scene {
                 });
             }
         }
+    }
+
+    private spawnFirecrackerBoss() {
+        this.gameState.bossFight = true;
+        this.bossHealth = 200; // Changed from 1000 to 200
+
+        const boss = this.bossEnemies.create(
+            this.game.config.width as number / 2,
+            -50,
+            'firecracker-boss'
+        ) as Phaser.Physics.Arcade.Sprite;
+
+        if (boss) {
+            boss.setScale(0.4);
+            boss.setAngle(180);
+            boss.setData('health', this.bossHealth);
+            
+            // Create boss health bar
+            this.bossHealthBar = this.add.graphics();
+            this.bossHealthText = this.add.text(10, 50, 'Boss Health: 100%', {
+                fontSize: '16px',
+                color: '#ffffff'
+            });
+            
+            this.updateBossHealthBar();
+
+            // Boss entry animation
+            this.tweens.add({
+                targets: boss,
+                y: 100,
+                duration: 2000,
+                ease: 'Power2'
+            });
+
+            // Add boss attack patterns
+            this.time.addEvent({
+                delay: 2000,
+                callback: () => {
+                    if (boss.active) {
+                        // Fire multiple projectiles in a spread pattern
+                        for (let i = -2; i <= 2; i++) {
+                            const projectile = this.enemyProjectiles.create(
+                                boss.x + (i * 30),
+                                boss.y + 20,
+                                'boss-laser'
+                            ) as Phaser.Physics.Arcade.Image;
+                            
+                            if (projectile) {
+                                projectile.setScale(0.8);
+                                const angle = 90 + (i * 15);
+                                const radian = Phaser.Math.DegToRad(angle);
+                                const speed = 300;
+                                
+                                projectile.setVelocity(
+                                    Math.cos(radian) * speed,
+                                    Math.sin(radian) * speed
+                                );
+                                projectile.setData('damage', 15);
+                            }
+                        }
+                    }
+                },
+                loop: true
+            });
+
+            // Play boss appearance sound
+            this.firecrackerSound.play();
+        }
+    }
+
+    private updateBossHealthBar() {
+        if (!this.bossHealthBar || !this.bossHealthText) return;
+
+        this.bossHealthBar.clear();
+
+        // Draw background (red) - reduced width to 25px
+        this.bossHealthBar.fillStyle(0xff0000);
+        this.bossHealthBar.fillRect(10, 30, 25, 20);
+
+        // Draw health (green) - calculate percentage based on 200 max health
+        const healthPercentage = (this.bossHealth / 200) * 100;
+        this.bossHealthBar.fillStyle(0x00ff00);
+        this.bossHealthBar.fillRect(10, 30, (this.bossHealth / 200) * 25, 20);
+
+        // Update text with percentage
+        this.bossHealthText.setText(`Boss Health: ${Math.round(healthPercentage)}%`);
+    }
+
+    private handleBulletBossCollision(bullet: Phaser.GameObjects.GameObject, boss: Phaser.GameObjects.GameObject) {
+        if (!bullet || !boss) return;
+        
+        bullet.destroy();
+        
+        // Reduce boss health by 2 (100 hits to defeat)
+        this.bossHealth = Math.max(0, this.bossHealth - 2);
+        this.updateBossHealthBar();
+
+        // Create hit effect at boss position
+        const bossSprite = boss as Phaser.Physics.Arcade.Sprite;
+        this.createHitEffect(bossSprite.x, bossSprite.y);
+
+        // Check if boss is defeated
+        if (this.bossHealth <= 0) {
+            // Create multiple explosion effects
+            for (let i = 0; i < 8; i++) {
+                const x = bossSprite.x + Phaser.Math.Between(0, bossSprite.width);
+                const y = bossSprite.y + Phaser.Math.Between(0, bossSprite.height);
+                const explosion = this.add.sprite(x, y, 'explosion1');
+                explosion.setScale(Phaser.Math.FloatBetween(0.3, 0.8));
+                explosion.play('explosion');
+                explosion.once('animationcomplete', () => {
+                    explosion.destroy();
+                });
+            }
+
+            // Play boss explosion sound
+            this.bossExplosionSound.play();
+
+            // Add score
+            this.gameState.score += 10000; // Increased reward
+            this.scoreText.setText(`Score: ${this.gameState.score}`);
+
+            // Remove boss and health bar
+            boss.destroy();
+            this.bossHealthBar.destroy();
+            this.bossHealthText.destroy();
+            
+            // Show stage completion message
+            const stageText = this.add.text(400, 300, 'Stage 1 Completed!\nMore challenges await...', {
+                fontSize: '48px',
+                color: '#ffffff',
+                align: 'center'
+            });
+            stageText.setOrigin(0.5);
+            
+            // Remove the message after 5 seconds
+            this.time.delayedCall(5000, () => {
+                stageText.destroy();
+            });
+            
+            // End boss fight
+            this.gameState.bossFight = false;
+        }
+    }
+
+    private createHitEffect(x: number, y: number) {
+        const effect = this.add.sprite(x, y, 'explosion1');
+        effect.setScale(0.3);
+        effect.play('explosion');
+        effect.once('animationcomplete', () => {
+            effect.destroy();
+        });
     }
 } 
