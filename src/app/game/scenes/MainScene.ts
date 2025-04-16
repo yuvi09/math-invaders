@@ -16,6 +16,7 @@ interface GameState {
     gameCompleted: boolean;
     hasGuidedRockets: boolean;
     lastRocketTime: number;
+    lastEliteEnemyTime: number;
 }
 
 enum EnemyType {
@@ -63,7 +64,8 @@ export class MainScene extends Phaser.Scene {
         bossHealth: 100,
         gameCompleted: false,
         hasGuidedRockets: false,
-        lastRocketTime: 0
+        lastRocketTime: 0,
+        lastEliteEnemyTime: 0
     };
 
     private lastShootTime: number = 0;
@@ -102,6 +104,9 @@ export class MainScene extends Phaser.Scene {
     private bossHealthBar!: Phaser.GameObjects.Graphics;
     private bossHealthText!: Phaser.GameObjects.Text;
 
+    private eliteEnemies!: Phaser.Physics.Arcade.Group;
+    private eliteEnemySpawnDelay: number = 15000; // 15 seconds initially
+
     constructor() {
         super({ key: 'MainScene' });
     }
@@ -121,6 +126,9 @@ export class MainScene extends Phaser.Scene {
         this.load.image('missile-enemy', 'assets/skyforce_assets/PNG/Enemies/enemyBlack3.png');
         this.load.image('nuker-enemy', 'assets/skyforce_assets/PNG/Enemies/enemyGreen5.png');
         this.load.image('walker-enemy', 'assets/skyforce_assets/PNG/Enemies/enemyBlack3.png');
+        
+        // Load elite enemy
+        this.load.image('elite-enemy', 'assets/skyforce_assets/PNG/Enemies/nicey_not.png');
         
         // Load boss ships
         this.load.image('boss1', 'assets/skyforce_assets/PNG/Ships/boss1.png');
@@ -327,6 +335,11 @@ export class MainScene extends Phaser.Scene {
         this.bossEnemies = this.physics.add.group();
 
         this.explosions = this.add.group();
+
+        this.eliteEnemies = this.physics.add.group({
+            classType: Phaser.Physics.Arcade.Sprite,
+            runChildUpdate: true
+        });
 
         // Add collisions
         this.physics.add.overlap(
@@ -557,6 +570,44 @@ this.boss1 = this.physics.add.sprite(500, 500, 'boss1');
             frameRate: 15,
             repeat: 0
         });
+
+        // Create elite enemy animation
+        // REMOVE/COMMENT OUT THE ELITE ANIMATION CREATION UNTIL WE FIX THE SPRITE SHEET
+        /*
+        this.anims.create({
+            key: 'elite-fly',
+            frames: this.anims.generateFrameNumbers('elite-enemy', { start: 0, end: 7 }),
+            frameRate: 10,
+            repeat: -1
+        });
+        */
+
+        // Add collisions for elite enemies
+        this.physics.add.overlap(
+            this.bullets,
+            this.eliteEnemies,
+            (bullet: Phaser.GameObjects.GameObject | Phaser.Physics.Arcade.Body | Phaser.Physics.Arcade.StaticBody | Phaser.Tilemaps.Tile,
+             enemy: Phaser.GameObjects.GameObject | Phaser.Physics.Arcade.Body | Phaser.Physics.Arcade.StaticBody | Phaser.Tilemaps.Tile) => {
+                if (bullet instanceof Phaser.Physics.Arcade.Image && 
+                    enemy instanceof Phaser.Physics.Arcade.Sprite) {
+                    this.handleBulletEliteEnemyCollision(bullet, enemy);
+                }
+            },
+            undefined,
+            this
+        );
+
+        // Add player-elite enemy collision
+        this.physics.add.overlap(
+            this.player,
+            this.eliteEnemies,
+            (player: Phaser.GameObjects.GameObject | Phaser.Physics.Arcade.Body | Phaser.Physics.Arcade.StaticBody | Phaser.Tilemaps.Tile,
+             enemy: Phaser.GameObjects.GameObject | Phaser.Physics.Arcade.Body | Phaser.Physics.Arcade.StaticBody | Phaser.Tilemaps.Tile) => {
+                this.gameOver();
+            },
+            undefined,
+            this
+        );
     }
 
     update(time: number, delta: number) {
@@ -630,6 +681,15 @@ this.boss1 = this.physics.add.sprite(500, 500, 'boss1');
             this.enemyDebris.clear(true, true);
             
             this.spawnFirecrackerBoss();
+        }
+
+        // Check for elite enemy spawn
+        if (this.gameState.score >= 1000 && !this.gameState.bossFight) {
+            const eliteSpawnRate = Math.max(10000, this.eliteEnemySpawnDelay - Math.floor(timeMinutes) * 500);
+            if (time > this.gameState.lastEliteEnemyTime + eliteSpawnRate) {
+                this.spawnEliteEnemy();
+                this.gameState.lastEliteEnemyTime = time;
+            }
         }
 
         // Only spawn regular enemies if not in boss fight
@@ -1463,7 +1523,7 @@ this.boss1 = this.physics.add.sprite(500, 500, 'boss1');
         this.bossHealthText.setText(`Boss Health: ${Math.round(healthPercentage)}%`);
     }
 
-    private handleBulletBossCollision(bullet: Phaser.GameObjects.GameObject, boss: Phaser.GameObjects.GameObject) {
+    private handleBulletBossCollision(bullet: Phaser.Physics.Arcade.Image, boss: Phaser.Physics.Arcade.Sprite) {
         if (!bullet || !boss) return;
         
         bullet.destroy();
@@ -1479,13 +1539,12 @@ this.boss1 = this.physics.add.sprite(500, 500, 'boss1');
         this.updateBossHealthBar();
 
         // Create hit effect at boss position
-        const bossSprite = boss as Phaser.Physics.Arcade.Sprite;
-        this.createHitEffect(bossSprite.x, bossSprite.y);
+        this.createHitEffect(boss.x, boss.y);
 
         // Check if boss is defeated
         if (this.bossHealth <= 0) {
             // Create epic explosion sequence
-            this.createBossDestructionSequence(bossSprite);
+            this.createBossDestructionSequence(boss);
             
             // Add score
             this.gameState.score += 10000;
@@ -1722,6 +1781,157 @@ this.boss1 = this.physics.add.sprite(500, 500, 'boss1');
                 }
             },
             repeat: 40
+        });
+    }
+
+    private spawnEliteEnemy() {
+        const x = Phaser.Math.Between(100, Number(this.game.config.width) - 100);
+        const enemy = this.eliteEnemies.create(x, -50, 'elite-enemy') as Phaser.Physics.Arcade.Sprite;
+        
+        if (enemy) {
+            // Set appropriate scale (adjust based on your sprite size)
+            enemy.setScale(1.0);
+            
+            // Set health (tougher than other enemies)
+            enemy.setData('health', 10);
+            
+            // Initial downward movement
+            enemy.setVelocityY(100);
+            
+            // Make elite enemy hover and attack
+            this.time.delayedCall(1000, () => {
+                if (enemy.active) {
+                    // Stop at a position above the player
+                    enemy.setVelocityY(0);
+                    
+                    // Add hovering effect
+                    this.tweens.add({
+                        targets: enemy,
+                        y: enemy.y + 20,
+                        duration: 1500,
+                        ease: 'Sine.easeInOut',
+                        yoyo: true,
+                        repeat: -1
+                    });
+                    
+                    // Move side to side
+                    this.tweens.add({
+                        targets: enemy,
+                        x: enemy.x + Phaser.Math.Between(-150, 150),
+                        duration: 2000,
+                        ease: 'Sine.easeInOut',
+                        yoyo: true,
+                        repeat: -1
+                    });
+                    
+                    // Start attack pattern
+                    this.startEliteAttack(enemy);
+                    
+                    // Leave after some time
+                    this.time.delayedCall(8000, () => {
+                        if (enemy.active) {
+                            // Stop hovering and leave
+                            this.tweens.killTweensOf(enemy);
+                            enemy.setVelocityY(150);
+                        }
+                    });
+                }
+            });
+        }
+    }
+    
+    private startEliteAttack(enemy: Phaser.Physics.Arcade.Sprite) {
+        // Attack every second
+        const attackEvent = this.time.addEvent({
+            delay: 1000,
+            callback: () => {
+                if (enemy.active) {
+                    // Fire two lasers in V pattern
+                    for (let i = -1; i <= 1; i += 2) {
+                        const laser = this.enemyLasers.create(
+                            enemy.x + (i * 15),
+                            enemy.y + 20,
+                            'enemy-laser'
+                        ) as Phaser.Physics.Arcade.Image;
+                        
+                        if (laser) {
+                            laser.setScale(0.8);
+                            
+                            // Set trajectory towards player with spread
+                            const angle = Phaser.Math.Angle.Between(
+                                enemy.x, enemy.y,
+                                this.player.x, this.player.y
+                            ) + (i * 0.2); // Add spread
+                            
+                            const speed = 300;
+                            laser.setVelocity(
+                                Math.cos(angle) * speed,
+                                Math.sin(angle) * speed
+                            );
+                            
+                            laser.setRotation(angle + Math.PI/2);
+                        }
+                    }
+                    
+                    // Play laser sound
+                    this.laserSound.play({ volume: 0.3 });
+                } else {
+                    // Stop attacking if enemy destroyed
+                    attackEvent.destroy();
+                }
+            },
+            loop: true
+        });
+        
+        // Stop attacking when enemy leaves
+        enemy.once('destroy', () => {
+            attackEvent.destroy();
+        });
+    }
+    
+    private handleBulletEliteEnemyCollision(bullet: Phaser.Physics.Arcade.Image, enemy: Phaser.Physics.Arcade.Sprite) {
+        bullet.destroy();
+        
+        // Get current health and reduce it
+        const health = (enemy.getData('health') || 0) - 1;
+        enemy.setData('health', health);
+        
+        // Flash enemy
+        enemy.setTint(0xff0000);
+        this.time.delayedCall(100, () => {
+            if (enemy.active) {
+                enemy.clearTint();
+            }
+        });
+        
+        // Check if enemy is destroyed
+        if (health <= 0) {
+            // Create explosion effect
+            this.createExplosion(enemy.x, enemy.y, 1.2);
+            
+            // Play explosion sound
+            this.explosionSound.play();
+            
+            // Add score (worth more than regular enemies)
+            this.gameState.score += 500;
+            this.scoreText.setText(`Score: ${this.gameState.score}`);
+            
+            // Random chance for power-up
+            if (Math.random() < 0.2) { // 20% chance
+                this.gameState.firepower = Math.min(this.gameState.firepower + 1, 3);
+            }
+            
+            // Destroy enemy
+            enemy.destroy();
+        }
+    }
+    
+    private createExplosion(x: number, y: number, scale: number = 1.0) {
+        const explosion = this.add.sprite(x, y, 'explosion1');
+        explosion.setScale(scale);
+        explosion.play('explosion');
+        explosion.once('animationcomplete', () => {
+            explosion.destroy();
         });
     }
 } 
