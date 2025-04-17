@@ -874,41 +874,71 @@ this.boss1 = this.physics.add.sprite(500, 500, 'boss1');
 
     private spawnEnemy() {
         const x = Phaser.Math.Between(50, Number(this.game.config.width) - 50);
-        const enemy = this.enemies.create(x, -50, 'enemy') as Phaser.Physics.Arcade.Sprite;
         
-        if (enemy) {
-            enemy.setScale(0.5);
-            // Increase speed based on game time
-            const baseSpeed = Phaser.Math.Between(100, 200);
-            const timeBonus = Math.min(100, Math.floor(this.gameState.gameTime / 30000) * 20);
-            const speed = baseSpeed + timeBonus;
+        // Spawn 3 enemies in a line with wave movement
+        for (let i = 0; i < 3; i++) {
+            const enemy = this.enemies.create(x, -50 - (i * 60), 'enemy') as Phaser.Physics.Arcade.Sprite;
             
-            enemy.setVelocityY(speed);
-            
-            // Increase horizontal movement based on time
-            const baseHorizontalSpeed = 50;
-            const horizontalBonus = Math.min(50, Math.floor(this.gameState.gameTime / 60000) * 10);
-            const horizontalSpeed = Phaser.Math.Between(-baseHorizontalSpeed - horizontalBonus, 
-                                                      baseHorizontalSpeed + horizontalBonus);
-            enemy.setVelocityX(horizontalSpeed);
+            if (enemy) {
+                enemy.setScale(0.25);
+                
+                // Base vertical movement
+                const baseSpeed = Phaser.Math.Between(100, 200);
+                const timeBonus = Math.min(100, Math.floor(this.gameState.gameTime / 30000) * 20);
+                const speed = baseSpeed + timeBonus;
+                
+                enemy.setVelocityY(speed);
+                
+                // Create wave motion using sine wave
+                const startX = enemy.x;
+                const amplitude = 50; // Width of wave
+                const frequency = 0.003; // Speed of wave
+                
+                this.time.addEvent({
+                    delay: 16, // 60fps
+                    loop: true,
+                    callback: () => {
+                        if (enemy.active) {
+                            enemy.x = startX + Math.sin(enemy.y * frequency) * amplitude;
+                        }
+                    }
+                });
+            }
         }
     }
 
     private spawnLaserEnemy() {
+        // Limit to 2 at a time
+        if (this.laserEnemies.countActive() >= 2) return;
+
         const x = Phaser.Math.Between(100, Number(this.game.config.width) - 100);
         const enemy = this.laserEnemies.create(x, -100, 'laser-enemy') as Phaser.Physics.Arcade.Sprite;
         
         if (enemy) {
             enemy.setScale(0.8);
-            // Increase speed based on game time
-            const baseSpeed = Phaser.Math.Between(50, 100);
-            const timeBonus = Math.min(50, Math.floor(this.gameState.gameTime / 60000) * 10);
-            const speed = baseSpeed + timeBonus;
+            enemy.setData('initialHealth', 5); // Increased from 3
+            enemy.setData('health', 5);
+            enemy.setData('isHovering', true);
             
-            enemy.setVelocityY(speed);
-            // Health increases over time (max +2 health)
-            const extraHealth = Math.min(2, Math.floor(this.gameState.gameTime / 120000));
-            enemy.setData('health', 3 + extraHealth);
+            // Initial hover position
+            this.tweens.add({
+                targets: enemy,
+                y: 100,
+                duration: 1500,
+                ease: 'Power2',
+                onComplete: () => {
+                    if (enemy.active) {
+                        // Add hover effect
+                        this.tweens.add({
+                            targets: enemy,
+                            y: '+=20',
+                            duration: 2000,
+                            yoyo: true,
+                            repeat: -1
+                        });
+                    }
+                }
+            });
         }
     }
 
@@ -932,36 +962,46 @@ this.boss1 = this.physics.add.sprite(500, 500, 'boss1');
     ) {
         bullet.destroy();
 
-        if (enemyType === EnemyType.LASER) {
-            const health = (enemy.getData('health') || 0) - 1;
-            enemy.setData('health', health);
+        const health = (enemy.getData('health') || 0) - 1;
+        enemy.setData('health', health);
+        
+        // Check if enemy should start moving down
+        if (enemy.getData('isHovering') && health <= enemy.getData('initialHealth') / 2) {
+            enemy.setData('isHovering', false);
+            this.tweens.killTweensOf(enemy);
             
-            if (health <= 0) {
-                this.destroyEnemy(enemy, true);
-                this.gameState.score += 500; // Laser enemy worth 500 points
-                this.gameState.firepower = Math.min(this.gameState.firepower + 1, 3);
+            // Set downward velocity
+            const baseSpeed = Phaser.Math.Between(100, 200);
+            const timeBonus = Math.min(100, Math.floor(this.gameState.gameTime / 30000) * 20);
+            const speed = baseSpeed + timeBonus;
+            enemy.setVelocityY(speed);
+        }
+
+        if (health <= 0) {
+            switch (enemyType) {
+                case EnemyType.LASER:
+                    this.destroyEnemy(enemy, true);
+                    this.gameState.score += 500;
+                    this.gameState.firepower = Math.min(this.gameState.firepower + 1, 3);
+                    break;
+                case EnemyType.MISSILE:
+                    this.destroyEnemy(enemy, true);
+                    this.gameState.score += 400;
+                    break;
+                case EnemyType.NUKER:
+                    this.destroyEnemy(enemy, true);
+                    this.createDebris(enemy.x, enemy.y);
+                    this.gameState.score += 300;
+                    break;
+                case EnemyType.WALKER:
+                    this.destroyEnemy(enemy, true);
+                    this.spawnWalkerDebris(enemy.x, enemy.y);
+                    this.gameState.score += 200;
+                    break;
+                default:
+                    this.destroyEnemy(enemy, false);
+                    this.gameState.score += 100;
             }
-        } else if (enemyType === EnemyType.NUKER) {
-            const health = (enemy.getData('health') || 0) - 1;
-            enemy.setData('health', health);
-            
-            if (health <= 0) {
-                this.destroyEnemy(enemy, true);
-                this.createDebris(enemy.x, enemy.y);
-                this.gameState.score += 300;  // Nuker worth 300 points
-            }
-        } else if (enemyType === EnemyType.WALKER) {
-            const health = (enemy.getData('health') || 0) - 1;
-            enemy.setData('health', health);
-            
-            if (health <= 0) {
-                this.destroyEnemy(enemy, true);
-                this.spawnWalkerDebris(enemy.x, enemy.y);  // Spawn regular enemies on death
-                this.gameState.score += 200;  // Walker worth 200 points
-            }
-        } else {
-            this.destroyEnemy(enemy, false);
-            this.gameState.score += 100; // Regular enemy worth 100 points
         }
     }
 
@@ -1078,20 +1118,37 @@ this.boss1 = this.physics.add.sprite(500, 500, 'boss1');
     }
 
     private spawnMissileEnemy() {
+        // Limit to 2 at a time
+        if (this.missileEnemies.countActive() >= 2) return;
+
         const x = Phaser.Math.Between(100, Number(this.game.config.width) - 100);
         const enemy = this.missileEnemies.create(x, -100, 'missile-enemy') as Phaser.Physics.Arcade.Sprite;
         
         if (enemy) {
             enemy.setScale(0.8);
-            // Increase speed based on game time
-            const baseSpeed = Phaser.Math.Between(50, 100);
-            const timeBonus = Math.min(50, Math.floor(this.gameState.gameTime / 60000) * 10);
-            const speed = baseSpeed + timeBonus;
+            enemy.setData('initialHealth', 6); // Increased from 4
+            enemy.setData('health', 6);
+            enemy.setData('isHovering', true);
             
-            enemy.setVelocityY(speed);
-            // Health increases over time (max +2 health)
-            const extraHealth = Math.min(2, Math.floor(this.gameState.gameTime / 120000));
-            enemy.setData('health', 4 + extraHealth);
+            // Initial hover position
+            this.tweens.add({
+                targets: enemy,
+                y: 150,
+                duration: 1500,
+                ease: 'Power2',
+                onComplete: () => {
+                    if (enemy.active) {
+                        // Add hover effect
+                        this.tweens.add({
+                            targets: enemy,
+                            y: '+=20',
+                            duration: 2000,
+                            yoyo: true,
+                            repeat: -1
+                        });
+                    }
+                }
+            });
         }
     }
 
@@ -1123,20 +1180,37 @@ this.boss1 = this.physics.add.sprite(500, 500, 'boss1');
     }
 
     private spawnNukerEnemy() {
+        // Limit to 2 at a time
+        if (this.nukerEnemies.countActive() >= 2) return;
+
         const x = Phaser.Math.Between(100, Number(this.game.config.width) - 100);
         const enemy = this.nukerEnemies.create(x, -100, 'nuker-enemy') as Phaser.Physics.Arcade.Sprite;
         
         if (enemy) {
             enemy.setScale(0.8);
-            // Increase speed based on game time
-            const baseSpeed = Phaser.Math.Between(40, 80);  // Slower than other enemies
-            const timeBonus = Math.min(40, Math.floor(this.gameState.gameTime / 60000) * 8);
-            const speed = baseSpeed + timeBonus;
+            enemy.setData('initialHealth', 7); // Increased from 5
+            enemy.setData('health', 7);
+            enemy.setData('isHovering', true);
             
-            enemy.setVelocityY(speed);
-            // Health increases over time (max +2 health)
-            const extraHealth = Math.min(2, Math.floor(this.gameState.gameTime / 120000));
-            enemy.setData('health', 5 + extraHealth);  // Takes 5 hits base
+            // Initial hover position
+            this.tweens.add({
+                targets: enemy,
+                y: 120,
+                duration: 1500,
+                ease: 'Power2',
+                onComplete: () => {
+                    if (enemy.active) {
+                        // Add hover effect
+                        this.tweens.add({
+                            targets: enemy,
+                            y: '+=20',
+                            duration: 2000,
+                            yoyo: true,
+                            repeat: -1
+                        });
+                    }
+                }
+            });
         }
     }
 
@@ -1195,23 +1269,42 @@ this.boss1 = this.physics.add.sprite(500, 500, 'boss1');
     }
 
     private spawnWalkerGroup() {
+        // Limit to 2 at a time
+        if (this.walkerEnemies.countActive() >= 2) return;
+
         const positions = [
-            { x: 100, y: -100 },
-            { x: 400, y: -100 },
-            { x: 700, y: -100 }
+            { x: Phaser.Math.Between(100, Number(this.game.config.width) - 100), y: -100 }
         ];
 
         positions.forEach(pos => {
             const walker = this.walkerEnemies.create(pos.x, pos.y, 'walker-enemy') as Phaser.Physics.Arcade.Sprite;
             
             if (walker) {
-                walker.setScale(0.8);  // Match scale with other special enemies
-                // Health increases over time (max +2 health)
-                const extraHealth = Math.min(2, Math.floor(this.gameState.gameTime / 120000));
-                walker.setData('health', 1 + extraHealth);
-                
-                // Set origin to center for proper rotation
+                walker.setScale(0.8);
+                walker.setData('initialHealth', 4); // Increased from 1
+                walker.setData('health', 4);
+                walker.setData('isHovering', true);
                 walker.setOrigin(0.5, 0.5);
+                
+                // Initial hover position
+                this.tweens.add({
+                    targets: walker,
+                    y: 130,
+                    duration: 1500,
+                    ease: 'Power2',
+                    onComplete: () => {
+                        if (walker.active) {
+                            // Add hover effect
+                            this.tweens.add({
+                                targets: walker,
+                                y: '+=20',
+                                duration: 2000,
+                                yoyo: true,
+                                repeat: -1
+                            });
+                        }
+                    }
+                });
             }
         });
     }
@@ -1788,8 +1881,8 @@ this.boss1 = this.physics.add.sprite(500, 500, 'boss1');
         const enemy = this.eliteEnemies.create(x, -50, 'elite-enemy') as Phaser.Physics.Arcade.Sprite;
         
         if (enemy) {
-            // Set appropriate scale (adjust based on your sprite size)
-            enemy.setScale(1.0);
+            enemy.setScale(0.75); // Reduced by 25% from original size of 1.0
+            enemy.setAngle(180); // Rotate to face player's ship
             
             // Set health (tougher than other enemies)
             enemy.setData('health', 10);
