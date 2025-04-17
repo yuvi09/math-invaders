@@ -601,8 +601,7 @@ this.boss1 = this.physics.add.sprite(500, 500, 'boss1');
         this.physics.add.overlap(
             this.player,
             this.eliteEnemies,
-            (player: Phaser.GameObjects.GameObject | Phaser.Physics.Arcade.Body | Phaser.Physics.Arcade.StaticBody | Phaser.Tilemaps.Tile,
-             enemy: Phaser.GameObjects.GameObject | Phaser.Physics.Arcade.Body | Phaser.Physics.Arcade.StaticBody | Phaser.Tilemaps.Tile) => {
+            () => {
                 this.gameOver();
             },
             undefined,
@@ -1669,7 +1668,7 @@ this.boss1 = this.physics.add.sprite(500, 500, 'boss1');
                 rocket.setData('guided', true);
                 
                 // Find the closest enemy to target
-                let closestEnemy = this.findClosestEnemy(pos.x, pos.y);
+                const closestEnemy = this.findClosestEnemy(pos.x, pos.y);
                 
                 // If we found a target, start guided behavior
                 if (closestEnemy) {
