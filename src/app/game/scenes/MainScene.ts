@@ -74,7 +74,7 @@ export class MainScene extends Phaser.Scene {
     private lastMissileEnemySpawnTime: number = 0;
     private lastLaserShootTime: number = 0;
     private lastMissileShootTime: number = 0;
-    private shootDelay: number = 250;
+    private shootDelay: number = 167; // Reduced from 250 to increase fire rate by 50%
     private enemySpawnDelay: number = 2000;
     private laserEnemySpawnDelay: number = 15000;
     private missileEnemySpawnDelay: number = 12000; // Missile enemy every 12 seconds
