@@ -202,20 +202,73 @@ export class MainScene extends Phaser.Scene {
         // Add restart key
         this.input.keyboard!.addKey('R').on('down', () => this.restartGame());
 
-        // Add touch/trackpad controls with smoother movement
+        // Add touch/trackpad controls with enhanced movement
         this.input.on('pointermove', (pointer: Phaser.Input.Pointer) => {
-            if (pointer.isDown || pointer.x !== pointer.prevPosition.x) {
+            if (pointer.isDown || pointer.x !== pointer.prevPosition.x || pointer.y !== pointer.prevPosition.y) {
+                // Get game bounds
+                const gameWidth = Number(this.game.config.width);
+                const gameHeight = Number(this.game.config.height);
+                
+                // Calculate target position with proper bounds
                 const targetX = Phaser.Math.Clamp(
                     pointer.x,
-                    this.player.width / 2,
-                    Number(this.game.config.width) - this.player.width / 2
+                    this.player.width * this.player.scale * 0.5,
+                    gameWidth - this.player.width * this.player.scale * 0.5
                 );
                 
-                // Smoother movement towards target
+                // Add vertical movement but restrict to bottom 2/3 of screen
+                const minY = gameHeight * 0.33; // Top 1/3 of screen off limits
+                const maxY = gameHeight - this.player.height * this.player.scale * 0.5;
+                const targetY = Phaser.Math.Clamp(
+                    pointer.y,
+                    minY,
+                    maxY
+                );
+                
+                // Dynamic movement speed based on distance
                 const dx = targetX - this.player.x;
-                const moveSpeed = 0.15; // Reduced from 0.5 for smoother movement
+                const dy = targetY - this.player.y;
+                const distance = Math.sqrt(dx * dx + dy * dy);
+                
+                // Faster response for larger distances, smoother for small adjustments
+                const baseSpeed = 0.15;
+                const maxSpeed = 0.35;
+                const moveSpeed = Math.min(maxSpeed, baseSpeed + (distance / 500));
+                
+                // Apply movement with dynamic speed
                 this.player.x += dx * moveSpeed;
+                this.player.y += dy * moveSpeed;
             }
+        });
+
+        // Add pointer down support for tap-to-move
+        this.input.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
+            // Same logic as pointermove but allows for tap-to-move
+            const gameWidth = Number(this.game.config.width);
+            const gameHeight = Number(this.game.config.height);
+            
+            const targetX = Phaser.Math.Clamp(
+                pointer.x,
+                this.player.width * this.player.scale * 0.5,
+                gameWidth - this.player.width * this.player.scale * 0.5
+            );
+            
+            const minY = gameHeight * 0.33;
+            const maxY = gameHeight - this.player.height * this.player.scale * 0.5;
+            const targetY = Phaser.Math.Clamp(
+                pointer.y,
+                minY,
+                maxY
+            );
+            
+            // Create a tween for smooth movement to tapped location
+            this.tweens.add({
+                targets: this.player,
+                x: targetX,
+                y: targetY,
+                duration: 300,
+                ease: 'Power2'
+            });
         });
 
         // Auto-shooting system
@@ -622,16 +675,45 @@ this.boss1 = this.physics.add.sprite(500, 500, 'boss1');
 
         if (!this.player || !this.cursors) return;
 
-        // Handle player movement
-        if (this.cursors.left.isDown) {
-            this.player.setVelocityX(-this.speed);
-        } else if (this.cursors.right.isDown) {
-            this.player.setVelocityX(this.speed);
+        // Handle keyboard movement
+        const keyboardActive = this.cursors.left.isDown || this.cursors.right.isDown || 
+                              this.cursors.up.isDown || this.cursors.down.isDown;
+        
+        if (keyboardActive) {
+            // Horizontal movement
+            if (this.cursors.left.isDown) {
+                this.player.setVelocityX(-this.speed);
+            } else if (this.cursors.right.isDown) {
+                this.player.setVelocityX(this.speed);
+            } else {
+                this.player.setVelocityX(0);
+            }
+            
+            // Add vertical keyboard movement
+            if (this.cursors.up.isDown) {
+                const minY = Number(this.game.config.height) * 0.33;
+                if (this.player.y > minY) {
+                    this.player.setVelocityY(-this.speed);
+                } else {
+                    this.player.setVelocityY(0);
+                }
+            } else if (this.cursors.down.isDown) {
+                const maxY = Number(this.game.config.height) - this.player.height * this.player.scale * 0.5;
+                if (this.player.y < maxY) {
+                    this.player.setVelocityY(this.speed);
+                } else {
+                    this.player.setVelocityY(0);
+                }
+            } else {
+                this.player.setVelocityY(0);
+            }
         } else {
             // Only stop if not being controlled by trackpad
             if (!this.input.activePointer.isDown && 
-                this.input.activePointer.x === this.input.activePointer.prevPosition.x) {
+                this.input.activePointer.x === this.input.activePointer.prevPosition.x &&
+                this.input.activePointer.y === this.input.activePointer.prevPosition.y) {
                 this.player.setVelocityX(0);
+                this.player.setVelocityY(0);
             }
         }
 
