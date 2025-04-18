@@ -1,0 +1,38 @@
+{
+    "name": "Basic Addition",
+    "description": "Simple addition problems for beginners",
+    "minLevel": 1,
+    "maxLevel": 5,
+    "questions": [
+        {
+            "id": "add_1",
+            "question": "What is 5 + 3?",
+            "options": ["7", "8", "9", "6"],
+            "correctAnswer": "8",
+            "difficulty": "easy",
+            "type": "addition",
+            "points": 10,
+            "timeLimit": 15
+        },
+        {
+            "id": "add_2",
+            "question": "What is 4 + 6?",
+            "options": ["9", "10", "11", "8"],
+            "correctAnswer": "10",
+            "difficulty": "easy",
+            "type": "addition",
+            "points": 10,
+            "timeLimit": 15
+        },
+        {
+            "id": "add_3",
+            "question": "What is 7 + 2?",
+            "options": ["8", "9", "10", "11"],
+            "correctAnswer": "9",
+            "difficulty": "easy",
+            "type": "addition",
+            "points": 10,
+            "timeLimit": 15
+        }
+    ]
+} 

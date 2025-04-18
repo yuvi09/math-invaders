@@ -1,0 +1,38 @@
+{
+    "name": "Intermediate Multiplication",
+    "description": "Multiplication problems for intermediate learners",
+    "minLevel": 6,
+    "maxLevel": 10,
+    "questions": [
+        {
+            "id": "mult_1",
+            "question": "What is 12 × 8?",
+            "options": ["88", "96", "92", "86"],
+            "correctAnswer": "96",
+            "difficulty": "medium",
+            "type": "multiplication",
+            "points": 20,
+            "timeLimit": 20
+        },
+        {
+            "id": "mult_2",
+            "question": "What is 15 × 7?",
+            "options": ["95", "105", "115", "125"],
+            "correctAnswer": "105",
+            "difficulty": "medium",
+            "type": "multiplication",
+            "points": 20,
+            "timeLimit": 20
+        },
+        {
+            "id": "mult_3",
+            "question": "What is 13 × 9?",
+            "options": ["117", "108", "126", "135"],
+            "correctAnswer": "117",
+            "difficulty": "medium",
+            "type": "multiplication",
+            "points": 20,
+            "timeLimit": 20
+        }
+    ]
+} 

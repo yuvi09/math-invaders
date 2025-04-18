@@ -1,4 +1,5 @@
 import * as Phaser from 'phaser';
+import { Question } from '../../math/types/Question';
 
 interface GameState {
     score: number;
@@ -106,6 +107,12 @@ export class MainScene extends Phaser.Scene {
 
     private eliteEnemies!: Phaser.Physics.Arcade.Group;
     private eliteEnemySpawnDelay: number = 15000; // 15 seconds initially
+
+    private checkpointQuestions: Question[] = [];
+    private currentCheckpointQuestionIndex: number = 0;
+    private correctCheckpointAnswers: number = 0;
+    private isCheckpointActive: boolean = false;
+    private checkpointUI: Phaser.GameObjects.Container | null = null;
 
     constructor() {
         super({ key: 'MainScene' });
@@ -660,6 +667,10 @@ this.boss1 = this.physics.add.sprite(500, 500, 'boss1');
             undefined,
             this
         );
+
+        this.setupCheckpointQuestions().catch(error => {
+            console.error('Failed to setup checkpoint questions:', error);
+        });
     }
 
     update(time: number, delta: number) {
@@ -921,6 +932,10 @@ this.boss1 = this.physics.add.sprite(500, 500, 'boss1');
 
         // Update health text
         this.healthText.setText(`Health: ${this.gameState.health}%`);
+
+        if (this.isCheckpointActive) {
+            this.updateScore(0);
+        }
     }
 
     private shoot() {
@@ -1141,6 +1156,10 @@ this.boss1 = this.physics.add.sprite(500, 500, 'boss1');
 
     private gameOver() {
         this.gameState.isGameOver = true;
+        
+        // Ensure health is set to 0 and update the display
+        this.gameState.health = 0;
+        this.healthText.setText(`Health: 0%`);
         
         // Create fire effect at player position
         const fire = this.add.sprite(this.player.x, this.player.y, 'fire00');
@@ -2107,5 +2126,151 @@ this.boss1 = this.physics.add.sprite(500, 500, 'boss1');
         explosion.once('animationcomplete', () => {
             explosion.destroy();
         });
+    }
+
+    private async loadQuestionSet(filename: string): Promise<Question[]> {
+        try {
+            const questionSet = await import(`../../math/data/${filename}`);
+            return questionSet.default.questions;
+        } catch (error) {
+            console.error(`Failed to load question set: ${filename}`, error);
+            return [];
+        }
+    }
+
+    private async setupCheckpointQuestions(): Promise<void> {
+        // Load checkpoint questions
+        this.checkpointQuestions = await this.loadQuestionSet('checkpoint_questions.json');
+    }
+
+    private showCheckpointQuestion(): void {
+        if (this.currentCheckpointQuestionIndex >= this.checkpointQuestions.length) {
+            this.handleCheckpointCompletion();
+            return;
+        }
+
+        const question = this.checkpointQuestions[this.currentCheckpointQuestionIndex];
+        
+        // Create UI container if it doesn't exist
+        if (!this.checkpointUI) {
+            this.checkpointUI = this.add.container(0, 0);
+            
+            // Add background
+            const bg = this.add.rectangle(
+                this.cameras.main.width / 2,
+                this.cameras.main.height / 2,
+                400,
+                300,
+                0x000000,
+                0.8
+            );
+            
+            // Add question text
+            const questionText = this.add.text(
+                this.cameras.main.width / 2,
+                this.cameras.main.height / 2 - 80,
+                question.question,
+                { fontSize: '24px', color: '#ffffff', align: 'center' }
+            ).setOrigin(0.5);
+            
+            // Add options
+            const options: Phaser.GameObjects.Text[] = [];
+            question.options.forEach((option: string, index: number) => {
+                const optionText = this.add.text(
+                    this.cameras.main.width / 2,
+                    this.cameras.main.height / 2 - 20 + (index * 40),
+                    `${String.fromCharCode(65 + index)}. ${option}`,
+                    { fontSize: '20px', color: '#ffffff' }
+                ).setOrigin(0.5);
+                
+                optionText.setInteractive();
+                optionText.on('pointerdown', () => this.handleCheckpointAnswer(option));
+                options.push(optionText);
+            });
+            
+            this.checkpointUI.add([bg, questionText, ...options]);
+        }
+        
+        this.isCheckpointActive = true;
+        this.physics.pause();
+    }
+
+    private handleCheckpointAnswer(answer: string): void {
+        const question = this.checkpointQuestions[this.currentCheckpointQuestionIndex];
+        
+        if (answer === question.correctAnswer) {
+            this.correctCheckpointAnswers++;
+            this.add.text(
+                this.cameras.main.width / 2,
+                this.cameras.main.height / 2 + 100,
+                'Correct!',
+                { fontSize: '24px', color: '#00ff00' }
+            ).setOrigin(0.5);
+        } else {
+            this.add.text(
+                this.cameras.main.width / 2,
+                this.cameras.main.height / 2 + 100,
+                'Incorrect!',
+                { fontSize: '24px', color: '#ff0000' }
+            ).setOrigin(0.5);
+        }
+        
+        this.currentCheckpointQuestionIndex++;
+        
+        // Wait a moment before showing next question
+        this.time.delayedCall(1000, () => {
+            if (this.checkpointUI) {
+                this.checkpointUI.destroy();
+                this.checkpointUI = null;
+            }
+            this.showCheckpointQuestion();
+        });
+    }
+
+    private handleCheckpointCompletion(): void {
+        this.isCheckpointActive = false;
+        this.physics.resume();
+        
+        if (this.correctCheckpointAnswers >= 3) {
+            // Player passed the checkpoint
+            this.add.text(
+                this.cameras.main.width / 2,
+                this.cameras.main.height / 2,
+                'Checkpoint passed!',
+                { fontSize: '32px', color: '#00ff00' }
+            ).setOrigin(0.5);
+            
+            // Show Firecracker Boss if player got 4 or more correct
+            if (this.correctCheckpointAnswers >= 4) {
+                this.spawnFirecrackerBoss();
+            }
+        } else {
+            // Player failed the checkpoint
+            this.add.text(
+                this.cameras.main.width / 2,
+                this.cameras.main.height / 2,
+                'Try again!',
+                { fontSize: '32px', color: '#ff0000' }
+            ).setOrigin(0.5);
+            
+            // Reset checkpoint state
+            this.currentCheckpointQuestionIndex = 0;
+            this.correctCheckpointAnswers = 0;
+            
+            // Show questions again after a delay
+            this.time.delayedCall(2000, () => {
+                this.showCheckpointQuestion();
+            });
+        }
+    }
+
+    private updateScore(amount: number): void {
+        this.gameState.score += amount;
+        this.scoreText.setText(`Score: ${this.gameState.score}`);
+        
+        // Check for checkpoint at 5000 points
+        if (this.gameState.score >= 5000 && !this.isCheckpointActive && this.currentCheckpointQuestionIndex === 0) {
+            this.showCheckpointQuestion();
+        }
     }
 } 

@@ -1,0 +1,208 @@
+{
+    "name": "Basic Multiplication (2, 3, 4)",
+    "description": "Multiplication problems focusing on 2, 3, and 4 times tables",
+    "minLevel": 1,
+    "maxLevel": 5,
+    "questions": [
+        {
+            "id": "q1",
+            "question": "What is 2 × 4?",
+            "options": ["6", "8", "10", "12"],
+            "correctAnswer": "8",
+            "difficulty": "easy",
+            "type": "multiplication",
+            "points": 10,
+            "timeLimit": 15
+        },
+        {
+            "id": "q2",
+            "question": "What is 3 × 3?",
+            "options": ["6", "7", "9", "12"],
+            "correctAnswer": "9",
+            "difficulty": "easy",
+            "type": "multiplication",
+            "points": 10,
+            "timeLimit": 15
+        },
+        {
+            "id": "q3",
+            "question": "What is 4 × 2?",
+            "options": ["6", "7", "8", "9"],
+            "correctAnswer": "8",
+            "difficulty": "easy",
+            "type": "multiplication",
+            "points": 10,
+            "timeLimit": 15
+        },
+        {
+            "id": "q4",
+            "question": "What is 3 × 4?",
+            "options": ["7", "9", "10", "12"],
+            "correctAnswer": "12",
+            "difficulty": "easy",
+            "type": "multiplication",
+            "points": 10,
+            "timeLimit": 15
+        },
+        {
+            "id": "q5",
+            "question": "What is 2 × 7?",
+            "options": ["12", "13", "14", "16"],
+            "correctAnswer": "14",
+            "difficulty": "easy",
+            "type": "multiplication",
+            "points": 10,
+            "timeLimit": 15
+        },
+        {
+            "id": "q6",
+            "question": "What is 4 × 5?",
+            "options": ["18", "20", "22", "24"],
+            "correctAnswer": "20",
+            "difficulty": "easy",
+            "type": "multiplication",
+            "points": 10,
+            "timeLimit": 15
+        },
+        {
+            "id": "q7",
+            "question": "What is 3 × 6?",
+            "options": ["18", "16", "14", "20"],
+            "correctAnswer": "18",
+            "difficulty": "easy",
+            "type": "multiplication",
+            "points": 10,
+            "timeLimit": 15
+        },
+        {
+            "id": "q8",
+            "question": "What is 2 × 8?",
+            "options": ["14", "15", "16", "18"],
+            "correctAnswer": "16",
+            "difficulty": "easy",
+            "type": "multiplication",
+            "points": 10,
+            "timeLimit": 15
+        },
+        {
+            "id": "q9",
+            "question": "What is 3 × 7?",
+            "options": ["21", "24", "18", "20"],
+            "correctAnswer": "21",
+            "difficulty": "easy",
+            "type": "multiplication",
+            "points": 10,
+            "timeLimit": 15
+        },
+        {
+            "id": "q10",
+            "question": "What is 4 × 6?",
+            "options": ["20", "24", "22", "28"],
+            "correctAnswer": "24",
+            "difficulty": "easy",
+            "type": "multiplication",
+            "points": 10,
+            "timeLimit": 15
+        },
+        {
+            "id": "q11",
+            "question": "What is 2 × 9?",
+            "options": ["17", "16", "18", "19"],
+            "correctAnswer": "18",
+            "difficulty": "easy",
+            "type": "multiplication",
+            "points": 10,
+            "timeLimit": 15
+        },
+        {
+            "id": "q12",
+            "question": "What is 3 × 5?",
+            "options": ["15", "14", "13", "16"],
+            "correctAnswer": "15",
+            "difficulty": "easy",
+            "type": "multiplication",
+            "points": 10,
+            "timeLimit": 15
+        },
+        {
+            "id": "q13",
+            "question": "What is 4 × 3?",
+            "options": ["10", "12", "14", "16"],
+            "correctAnswer": "12",
+            "difficulty": "easy",
+            "type": "multiplication",
+            "points": 10,
+            "timeLimit": 15
+        },
+        {
+            "id": "q14",
+            "question": "What is 2 × 6?",
+            "options": ["10", "12", "14", "16"],
+            "correctAnswer": "12",
+            "difficulty": "easy",
+            "type": "multiplication",
+            "points": 10,
+            "timeLimit": 15
+        },
+        {
+            "id": "q15",
+            "question": "What is 3 × 2?",
+            "options": ["4", "5", "6", "7"],
+            "correctAnswer": "6",
+            "difficulty": "easy",
+            "type": "multiplication",
+            "points": 10,
+            "timeLimit": 15
+        },
+        {
+            "id": "q16",
+            "question": "What is 4 × 4?",
+            "options": ["16", "18", "20", "14"],
+            "correctAnswer": "16",
+            "difficulty": "easy",
+            "type": "multiplication",
+            "points": 10,
+            "timeLimit": 15
+        },
+        {
+            "id": "q17",
+            "question": "What is 3 × 8?",
+            "options": ["22", "24", "26", "28"],
+            "correctAnswer": "24",
+            "difficulty": "easy",
+            "type": "multiplication",
+            "points": 10,
+            "timeLimit": 15
+        },
+        {
+            "id": "q18",
+            "question": "What is 2 × 5?",
+            "options": ["8", "9", "10", "11"],
+            "correctAnswer": "10",
+            "difficulty": "easy",
+            "type": "multiplication",
+            "points": 10,
+            "timeLimit": 15
+        },
+        {
+            "id": "q19",
+            "question": "What is 4 × 7?",
+            "options": ["26", "27", "28", "29"],
+            "correctAnswer": "28",
+            "difficulty": "easy",
+            "type": "multiplication",
+            "points": 10,
+            "timeLimit": 15
+        },
+        {
+            "id": "q20",
+            "question": "What is 3 × 9?",
+            "options": ["26", "27", "28", "30"],
+            "correctAnswer": "27",
+            "difficulty": "easy",
+            "type": "multiplication",
+            "points": 10,
+            "timeLimit": 15
+        }
+    ]
+}

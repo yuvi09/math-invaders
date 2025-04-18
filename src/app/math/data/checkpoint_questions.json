@@ -1,0 +1,58 @@
+{
+    "name": "5000 Point Checkpoint",
+    "description": "Questions to test player's knowledge before proceeding",
+    "minLevel": 1,
+    "maxLevel": 10,
+    "questions": [
+        {
+            "id": "check_1",
+            "question": "What is 12 × 4?",
+            "options": ["44", "46", "48", "50"],
+            "correctAnswer": "48",
+            "difficulty": "medium",
+            "type": "multiplication",
+            "points": 0,
+            "timeLimit": 20
+        },
+        {
+            "id": "check_2",
+            "question": "What is 15 × 3?",
+            "options": ["40", "45", "50", "55"],
+            "correctAnswer": "45",
+            "difficulty": "medium",
+            "type": "multiplication",
+            "points": 0,
+            "timeLimit": 20
+        },
+        {
+            "id": "check_3",
+            "question": "What is 8 × 6?",
+            "options": ["44", "46", "48", "50"],
+            "correctAnswer": "48",
+            "difficulty": "medium",
+            "type": "multiplication",
+            "points": 0,
+            "timeLimit": 20
+        },
+        {
+            "id": "check_4",
+            "question": "What is 7 × 7?",
+            "options": ["45", "47", "49", "51"],
+            "correctAnswer": "49",
+            "difficulty": "medium",
+            "type": "multiplication",
+            "points": 0,
+            "timeLimit": 20
+        },
+        {
+            "id": "check_5",
+            "question": "What is 9 × 5?",
+            "options": ["40", "45", "50", "55"],
+            "correctAnswer": "45",
+            "difficulty": "medium",
+            "type": "multiplication",
+            "points": 0,
+            "timeLimit": 20
+        }
+    ]
+} 
