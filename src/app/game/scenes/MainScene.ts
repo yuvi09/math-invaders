@@ -32,6 +32,17 @@ enum EnemyType {
     SHIELD = 'shield'
 }
 
+interface ArrayQuestionFormat {
+    id: string;
+    question: string;
+    choices: Record<string, number>;
+    answer: string;
+}
+
+interface ObjectQuestionFormat {
+    questions: Question[];
+}
+
 export class MainScene extends Phaser.Scene {
     private player!: Phaser.Physics.Arcade.Sprite;
     private cursors!: Phaser.Types.Input.Keyboard.CursorKeys;
@@ -58,9 +69,9 @@ export class MainScene extends Phaser.Scene {
         health: 100,
         gameTime: 0,
         nukerSpawnTimer: 0,
-        laserEnemySpawnRate: 15000, // 15 seconds initially
-        missileEnemySpawnRate: 12000, // 12 seconds initially
-        walkerSpawnRate: 20000, // 20 seconds initially
+        laserEnemySpawnRate: 15000,
+        missileEnemySpawnRate: 12000,
+        walkerSpawnRate: 20000,
         bossFight: false,
         bossHealth: 100,
         gameCompleted: false,
@@ -68,6 +79,7 @@ export class MainScene extends Phaser.Scene {
         lastRocketTime: 0,
         lastEliteEnemyTime: 0
     };
+    private mathQuestionsEnabled: boolean = true;
 
     private lastShootTime: number = 0;
     private lastEnemySpawnTime: number = 0;
@@ -112,7 +124,13 @@ export class MainScene extends Phaser.Scene {
     private currentCheckpointQuestionIndex: number = 0;
     private correctCheckpointAnswers: number = 0;
     private isCheckpointActive: boolean = false;
+    private isEnemySpawningPaused: boolean = false;
     private checkpointUI: Phaser.GameObjects.Container | null = null;
+    private availableQuestionSets: string[] = [
+        'checkpoint_questions.json',
+        'multiplication_questions_2_3_4.json',
+        'single_digit_multiplication_questions.json'
+    ];
 
     constructor() {
         super({ key: 'MainScene' });
@@ -683,6 +701,9 @@ this.boss1 = this.physics.add.sprite(500, 500, 'boss1');
         
         // Update game time
         this.gameState.gameTime += delta;
+        
+        // Calculate time in minutes for spawn rate adjustments
+        const timeMinutes = this.gameState.gameTime / 60000;
 
         if (!this.player || !this.cursors) return;
 
@@ -728,103 +749,106 @@ this.boss1 = this.physics.add.sprite(500, 500, 'boss1');
             }
         }
 
-        // Calculate spawn delays based on game time
-        const timeMinutes = this.gameState.gameTime / 60000;
-        
-        // Check for guided rocket power-up
-        if (this.gameState.score >= 15000 && !this.gameState.hasGuidedRockets) {
-            this.gameState.hasGuidedRockets = true;
+        // Only spawn enemies if spawning is not paused
+        if (!this.isEnemySpawningPaused) {
+            // Calculate spawn delays based on game time
+            const timeMinutes = this.gameState.gameTime / 60000;
             
-            // Display power-up message
-            const powerupText = this.add.text(400, 300, 'POWER UP: GUIDED ROCKETS ACQUIRED!', {
-                fontSize: '24px',
-                color: '#ffff00',
-                align: 'center'
-            });
-            powerupText.setOrigin(0.5);
-            
-            // Flash the text for visibility
-            this.tweens.add({
-                targets: powerupText,
-                alpha: 0,
-                duration: 500,
-                ease: 'Power2',
-                yoyo: true,
-                repeat: 3,
-                onComplete: () => {
-                    powerupText.destroy();
-                }
-            });
-            
-            // Play power-up sound
-            this.bossExplosionSound.play({ volume: 0.3 });
-        }
-        
-        // Check for boss spawn conditions
-        if (this.gameState.score >= 20000 && !this.gameState.bossFight && !this.gameState.gameCompleted) {
-            // Clear all existing enemies before spawning boss
-            this.enemies.clear(true, true);
-            this.laserEnemies.clear(true, true);
-            this.missileEnemies.clear(true, true);
-            this.nukerEnemies.clear(true, true);
-            this.walkerEnemies.clear(true, true);
-            this.enemyLasers.clear(true, true);
-            this.enemyMissiles.clear(true, true);
-            this.enemyDebris.clear(true, true);
-            
-            this.spawnFirecrackerBoss();
-        }
-
-        // Check for elite enemy spawn
-        if (this.gameState.score >= 1000 && !this.gameState.bossFight) {
-            const eliteSpawnRate = Math.max(10000, this.eliteEnemySpawnDelay - Math.floor(timeMinutes) * 500);
-            if (time > this.gameState.lastEliteEnemyTime + eliteSpawnRate) {
-                this.spawnEliteEnemy();
-                this.gameState.lastEliteEnemyTime = time;
-            }
-        }
-
-        // Only spawn regular enemies if not in boss fight
-        if (!this.gameState.bossFight) {
-            // Regular enemies spawn faster over time (starts at 2000ms, minimum 500ms)
-            const baseEnemySpawnDelay = Math.max(500, 2000 - Math.floor(timeMinutes) * 150);
-            if (time > this.lastEnemySpawnTime + baseEnemySpawnDelay) {
-                this.spawnEnemy();
-                this.lastEnemySpawnTime = time;
+            // Check for guided rocket power-up
+            if (this.gameState.score >= 15000 && !this.gameState.hasGuidedRockets) {
+                this.gameState.hasGuidedRockets = true;
                 
-                // Chance to spawn additional enemies increases with time
-                const extraSpawnChance = Math.min(0.5, timeMinutes * 0.05);
-                if (Math.random() < extraSpawnChance) {
-                    this.spawnEnemy();
+                // Display power-up message
+                const powerupText = this.add.text(400, 300, 'POWER UP: GUIDED ROCKETS ACQUIRED!', {
+                    fontSize: '24px',
+                    color: '#ffff00',
+                    align: 'center'
+                });
+                powerupText.setOrigin(0.5);
+                
+                // Flash the text for visibility
+                this.tweens.add({
+                    targets: powerupText,
+                    alpha: 0,
+                    duration: 500,
+                    ease: 'Power2',
+                    yoyo: true,
+                    repeat: 3,
+                    onComplete: () => {
+                        powerupText.destroy();
+                    }
+                });
+                
+                // Play power-up sound
+                this.bossExplosionSound.play({ volume: 0.3 });
+            }
+            
+            // Check for boss spawn conditions
+            if (this.gameState.score >= 20000 && !this.gameState.bossFight && !this.gameState.gameCompleted) {
+                // Clear all existing enemies before spawning boss
+                this.enemies.clear(true, true);
+                this.laserEnemies.clear(true, true);
+                this.missileEnemies.clear(true, true);
+                this.nukerEnemies.clear(true, true);
+                this.walkerEnemies.clear(true, true);
+                this.enemyLasers.clear(true, true);
+                this.enemyMissiles.clear(true, true);
+                this.enemyDebris.clear(true, true);
+                
+                this.spawnFirecrackerBoss();
+            }
+
+            // Check for elite enemy spawn
+            if (this.gameState.score >= 1000 && !this.gameState.bossFight) {
+                const eliteSpawnRate = Math.max(10000, this.eliteEnemySpawnDelay - Math.floor(timeMinutes) * 500);
+                if (time > this.gameState.lastEliteEnemyTime + eliteSpawnRate) {
+                    this.spawnEliteEnemy();
+                    this.gameState.lastEliteEnemyTime = time;
                 }
             }
 
-            // Laser enemies spawn more frequently (starts at 15000ms, minimum 5000ms)
-            const laserEnemySpawnRate = Math.max(5000, 15000 - Math.floor(timeMinutes) * 1000);
-            if (time > this.lastLaserEnemySpawnTime + laserEnemySpawnRate) {
-                this.spawnLaserEnemy();
-                this.lastLaserEnemySpawnTime = time;
-            }
+            // Only spawn regular enemies if not in boss fight
+            if (!this.gameState.bossFight) {
+                // Regular enemies spawn faster over time (starts at 2000ms, minimum 500ms)
+                const baseEnemySpawnDelay = Math.max(500, 2000 - Math.floor(timeMinutes) * 150);
+                if (time > this.lastEnemySpawnTime + baseEnemySpawnDelay) {
+                    this.spawnEnemy();
+                    this.lastEnemySpawnTime = time;
+                    
+                    // Chance to spawn additional enemies increases with time
+                    const extraSpawnChance = Math.min(0.5, timeMinutes * 0.05);
+                    if (Math.random() < extraSpawnChance) {
+                        this.spawnEnemy();
+                    }
+                }
 
-            // Missile enemies spawn more frequently (starts at 12000ms, minimum 6000ms)
-            const missileEnemySpawnRate = Math.max(6000, 12000 - Math.floor(timeMinutes) * 600);
-            if (time > this.lastMissileEnemySpawnTime + missileEnemySpawnRate) {
-                this.spawnMissileEnemy();
-                this.lastMissileEnemySpawnTime = time;
-            }
+                // Laser enemies spawn more frequently (starts at 15000ms, minimum 5000ms)
+                const laserEnemySpawnRate = Math.max(5000, 15000 - Math.floor(timeMinutes) * 1000);
+                if (time > this.lastLaserEnemySpawnTime + laserEnemySpawnRate) {
+                    this.spawnLaserEnemy();
+                    this.lastLaserEnemySpawnTime = time;
+                }
 
-            // Nuker enemies spawn more frequently (starts at 20000ms, minimum 10000ms)
-            const nukerSpawnRate = Math.max(10000, 20000 - Math.floor(timeMinutes) * 1000);
-            if (time > this.lastNukerSpawnTime + nukerSpawnRate) {
-                this.spawnNukerEnemy();
-                this.lastNukerSpawnTime = time;
-            }
+                // Missile enemies spawn more frequently (starts at 12000ms, minimum 6000ms)
+                const missileEnemySpawnRate = Math.max(6000, 12000 - Math.floor(timeMinutes) * 600);
+                if (time > this.lastMissileEnemySpawnTime + missileEnemySpawnRate) {
+                    this.spawnMissileEnemy();
+                    this.lastMissileEnemySpawnTime = time;
+                }
 
-            // Walker enemies spawn in groups (starts at 15000ms, minimum 8000ms)
-            const walkerSpawnRate = Math.max(8000, 15000 - Math.floor(timeMinutes) * 700);
-            if (time > this.lastWalkerSpawnTime + walkerSpawnRate) {
-                this.spawnWalkerGroup();
-                this.lastWalkerSpawnTime = time;
+                // Nuker enemies spawn more frequently (starts at 20000ms, minimum 10000ms)
+                const nukerSpawnRate = Math.max(10000, 20000 - Math.floor(timeMinutes) * 1000);
+                if (time > this.lastNukerSpawnTime + nukerSpawnRate) {
+                    this.spawnNukerEnemy();
+                    this.lastNukerSpawnTime = time;
+                }
+
+                // Walker enemies spawn in groups (starts at 15000ms, minimum 8000ms)
+                const walkerSpawnRate = Math.max(8000, 15000 - Math.floor(timeMinutes) * 700);
+                if (time > this.lastWalkerSpawnTime + walkerSpawnRate) {
+                    this.spawnWalkerGroup();
+                    this.lastWalkerSpawnTime = time;
+                }
             }
         }
 
@@ -1078,26 +1102,26 @@ this.boss1 = this.physics.add.sprite(500, 500, 'boss1');
             switch (enemyType) {
                 case EnemyType.LASER:
                     this.destroyEnemy(enemy, true);
-                    this.gameState.score += 500;
+                    this.updateScore(500);
                     this.gameState.firepower = Math.min(this.gameState.firepower + 1, 3);
                     break;
                 case EnemyType.MISSILE:
                     this.destroyEnemy(enemy, true);
-                    this.gameState.score += 400;
+                    this.updateScore(400);
                     break;
                 case EnemyType.NUKER:
                     this.destroyEnemy(enemy, true);
                     this.createDebris(enemy.x, enemy.y);
-                    this.gameState.score += 300;
+                    this.updateScore(300);
                     break;
                 case EnemyType.WALKER:
                     this.destroyEnemy(enemy, true);
                     this.spawnWalkerDebris(enemy.x, enemy.y);
-                    this.gameState.score += 200;
+                    this.updateScore(200);
                     break;
                 default:
                     this.destroyEnemy(enemy, false);
-                    this.gameState.score += 100;
+                    this.updateScore(100);
             }
         }
     }
@@ -1214,6 +1238,16 @@ this.boss1 = this.physics.add.sprite(500, 500, 'boss1');
         this.enemyDebris.clear(true, true);
         this.walkerEnemies.clear(true, true);
         this.enemyProjectiles.clear(true, true);
+        
+        // Reset checkpoint counters
+        this.currentCheckpointQuestionIndex = 0;
+        this.correctCheckpointAnswers = 0;
+        this.isCheckpointActive = false;
+        
+        // Reset and generate new random questions for next game
+        this.setupCheckpointQuestions().catch(error => {
+            console.error('Failed to setup checkpoint questions for new game:', error);
+        });
         
         this.scene.restart();
     }
@@ -1740,8 +1774,7 @@ this.boss1 = this.physics.add.sprite(500, 500, 'boss1');
             this.createBossDestructionSequence(boss);
             
             // Add score
-            this.gameState.score += 10000;
-            this.scoreText.setText(`Score: ${this.gameState.score}`);
+            this.updateScore(10000);
 
             // Remove boss and health bar
             boss.destroy();
@@ -2106,8 +2139,7 @@ this.boss1 = this.physics.add.sprite(500, 500, 'boss1');
             this.explosionSound.play();
             
             // Add score (worth more than regular enemies)
-            this.gameState.score += 500;
-            this.scoreText.setText(`Score: ${this.gameState.score}`);
+            this.updateScore(500);
             
             // Random chance for power-up
             if (Math.random() < 0.2) { // 20% chance
@@ -2128,42 +2160,127 @@ this.boss1 = this.physics.add.sprite(500, 500, 'boss1');
         });
     }
 
+    private async setupCheckpointQuestions(): Promise<void> {
+        console.log('Setting up checkpoint questions...');
+        
+        // Create a pool of all available questions
+        let allQuestions: Question[] = [];
+        
+        try {
+            // Load questions from all available sets
+            for (const filename of this.availableQuestionSets) {
+                const questions = await this.loadQuestionSet(filename);
+                allQuestions = [...allQuestions, ...questions];
+                console.log(`Loaded ${questions.length} questions from ${filename}`);
+            }
+            
+            // Shuffle and select 3 questions
+            this.checkpointQuestions = this.getRandomQuestions(allQuestions, 3);
+            console.log('Questions loaded:', this.checkpointQuestions.length);
+        } catch (error) {
+            console.error('Failed to setup checkpoint questions:', error);
+        }
+    }
+
     private async loadQuestionSet(filename: string): Promise<Question[]> {
         try {
+            console.log('Loading question set:', filename);
             const questionSet = await import(`../../math/data/${filename}`);
-            return questionSet.default.questions;
+            console.log('Question set loaded:', questionSet.default);
+            
+            // Handle array format (single_digit_multiplication_questions.json)
+            if (Array.isArray(questionSet.default)) {
+                return (questionSet.default as ArrayQuestionFormat[]).map((q) => {
+                    // Convert from "choices" format to "options" format
+                    const options = q.choices ? 
+                        Object.values(q.choices).map(val => String(val)) : [];
+                    
+                    const correctAnswer = q.choices && q.answer ? 
+                        String(q.choices[q.answer]) : '';
+                    
+                    return {
+                        id: q.id,
+                        question: q.question,
+                        options: options,
+                        correctAnswer: correctAnswer,
+                        difficulty: 'medium',
+                        type: 'multiplication',
+                        points: 10,
+                        timeLimit: 15
+                    };
+                });
+            }
+            
+            // Handle object format with questions array (other JSON files)
+            if (questionSet.default && 'questions' in questionSet.default) {
+                return (questionSet.default as ObjectQuestionFormat).questions;
+            } else {
+                console.error('Invalid question set structure:', questionSet.default);
+                return [];
+            }
         } catch (error) {
             console.error(`Failed to load question set: ${filename}`, error);
             return [];
         }
     }
 
-    private async setupCheckpointQuestions(): Promise<void> {
-        // Load checkpoint questions
-        this.checkpointQuestions = await this.loadQuestionSet('checkpoint_questions.json');
+    private getRandomQuestions(questions: Question[], count: number): Question[] {
+        // Shuffle array using Fisher-Yates algorithm
+        const shuffled = [...questions];
+        for (let i = shuffled.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+        }
+        
+        // Take first 'count' elements
+        return shuffled.slice(0, count);
     }
 
     private showCheckpointQuestion(): void {
+        console.log('showCheckpointQuestion called');
+        console.log('- Current Question Index:', this.currentCheckpointQuestionIndex);
+        console.log('- Total Questions:', this.checkpointQuestions.length);
+        
         if (this.currentCheckpointQuestionIndex >= this.checkpointQuestions.length) {
+            console.log('All questions completed, handling completion');
             this.handleCheckpointCompletion();
             return;
         }
 
         const question = this.checkpointQuestions[this.currentCheckpointQuestionIndex];
+        console.log('- Current Question:', question);
         
         // Create UI container if it doesn't exist
         if (!this.checkpointUI) {
+            console.log('Creating new checkpoint UI');
             this.checkpointUI = this.add.container(0, 0);
             
-            // Add background
-            const bg = this.add.rectangle(
+            // Add semi-transparent background overlay
+            const overlay = this.add.rectangle(
+                0, 0,
+                this.cameras.main.width,
+                this.cameras.main.height,
+                0x000000,
+                0.7
+            ).setOrigin(0);
+            
+            // Add main question panel
+            const panel = this.add.rectangle(
                 this.cameras.main.width / 2,
                 this.cameras.main.height / 2,
+                600,
                 400,
-                300,
                 0x000000,
-                0.8
-            );
+                0.9
+            ).setOrigin(0.5);
+            
+            // Add instructions text
+            const instructions = this.add.text(
+                this.cameras.main.width / 2,
+                this.cameras.main.height / 2 - 150,
+                'Click on the correct answer to proceed',
+                { fontSize: '20px', color: '#ffffff', align: 'center' }
+            ).setOrigin(0.5);
             
             // Add question text
             const questionText = this.add.text(
@@ -2173,26 +2290,63 @@ this.boss1 = this.physics.add.sprite(500, 500, 'boss1');
                 { fontSize: '24px', color: '#ffffff', align: 'center' }
             ).setOrigin(0.5);
             
-            // Add options
+            // Add options with hover effects
             const options: Phaser.GameObjects.Text[] = [];
             question.options.forEach((option: string, index: number) => {
+                const optionBg = this.add.rectangle(
+                    this.cameras.main.width / 2,
+                    this.cameras.main.height / 2 - 20 + (index * 60),
+                    400,
+                    40,
+                    0x333333
+                ).setOrigin(0.5);
+                
                 const optionText = this.add.text(
                     this.cameras.main.width / 2,
-                    this.cameras.main.height / 2 - 20 + (index * 40),
+                    this.cameras.main.height / 2 - 20 + (index * 60),
                     `${String.fromCharCode(65 + index)}. ${option}`,
                     { fontSize: '20px', color: '#ffffff' }
                 ).setOrigin(0.5);
                 
+                // Make the entire option interactive
+                optionBg.setInteractive();
                 optionText.setInteractive();
-                optionText.on('pointerdown', () => this.handleCheckpointAnswer(option));
+                
+                // Add hover effects
+                optionBg.on('pointerover', () => {
+                    optionBg.setFillStyle(0x444444);
+                });
+                
+                optionBg.on('pointerout', () => {
+                    optionBg.setFillStyle(0x333333);
+                });
+                
+                // Handle click
+                const handleClick = () => {
+                    this.handleCheckpointAnswer(option);
+                };
+                
+                optionBg.on('pointerdown', handleClick);
+                optionText.on('pointerdown', handleClick);
+                
                 options.push(optionText);
+                if (this.checkpointUI) {
+                    this.checkpointUI.add(optionBg);
+                }
             });
             
-            this.checkpointUI.add([bg, questionText, ...options]);
+            if (this.checkpointUI) {
+                this.checkpointUI.add([overlay, panel, instructions, questionText, ...options]);
+            }
+            console.log('Checkpoint UI created with', options.length, 'options');
+        } else {
+            console.log('Checkpoint UI already exists');
         }
         
         this.isCheckpointActive = true;
+        this.isEnemySpawningPaused = true;
         this.physics.pause();
+        console.log('Game paused for checkpoint');
     }
 
     private handleCheckpointAnswer(answer: string): void {
@@ -2229,9 +2383,11 @@ this.boss1 = this.physics.add.sprite(500, 500, 'boss1');
 
     private handleCheckpointCompletion(): void {
         this.isCheckpointActive = false;
+        this.isEnemySpawningPaused = false;
         this.physics.resume();
         
-        if (this.correctCheckpointAnswers >= 3) {
+        // Lower threshold to 2 out of 3 correct answers
+        if (this.correctCheckpointAnswers >= 2) {
             // Player passed the checkpoint
             this.add.text(
                 this.cameras.main.width / 2,
@@ -2240,10 +2396,10 @@ this.boss1 = this.physics.add.sprite(500, 500, 'boss1');
                 { fontSize: '32px', color: '#00ff00' }
             ).setOrigin(0.5);
             
-            // Show Firecracker Boss if player got 4 or more correct
-            if (this.correctCheckpointAnswers >= 4) {
-                this.spawnFirecrackerBoss();
-            }
+            // Create new questions for the next checkpoint
+            this.setupCheckpointQuestions().catch(error => {
+                console.error('Failed to setup new checkpoint questions:', error);
+            });
         } else {
             // Player failed the checkpoint
             this.add.text(
@@ -2265,12 +2421,43 @@ this.boss1 = this.physics.add.sprite(500, 500, 'boss1');
     }
 
     private updateScore(amount: number): void {
+        const oldScore = this.gameState.score;
         this.gameState.score += amount;
         this.scoreText.setText(`Score: ${this.gameState.score}`);
-        
-        // Check for checkpoint at 5000 points
-        if (this.gameState.score >= 5000 && !this.isCheckpointActive && this.currentCheckpointQuestionIndex === 0) {
-            this.showCheckpointQuestion();
+
+        console.log('Score Update:');
+        console.log('- Old Score:', oldScore);
+        console.log('- Amount Added:', amount);
+        console.log('- New Score:', this.gameState.score);
+
+        // Only check for checkpoint questions if math questions are enabled
+        if (this.mathQuestionsEnabled) {
+            const checkpointInterval = 5000;
+            const currentCheckpoint = Math.floor(this.gameState.score / checkpointInterval);
+            const oldCheckpoint = Math.floor(oldScore / checkpointInterval);
+            
+            console.log('Checkpoint Check:');
+            console.log('- Old Checkpoint:', oldCheckpoint);
+            console.log('- Current Checkpoint:', currentCheckpoint);
+            console.log('- Previous Checkpoint Index:', this.currentCheckpointQuestionIndex);
+            console.log('- Is Checkpoint Active:', this.isCheckpointActive);
+            console.log('- Questions Available:', this.checkpointQuestions.length);
+            
+            if (currentCheckpoint > oldCheckpoint && !this.isCheckpointActive) {
+                console.log('Triggering checkpoint question!');
+                // Reset checkpoint counters
+                this.currentCheckpointQuestionIndex = 0;
+                this.correctCheckpointAnswers = 0;
+                
+                // Show the first question
+                this.showCheckpointQuestion();
+            }
         }
+    }
+
+    // Add a public method to set the math questions enabled state
+    public setMathQuestionsEnabled(enabled: boolean): void {
+        console.log(`Math questions ${enabled ? 'enabled' : 'disabled'}`);
+        this.mathQuestionsEnabled = enabled;
     }
 } 

@@ -2,10 +2,16 @@
 
 import { useEffect, useRef, useState } from 'react';
 import type Phaser from 'phaser';
+import type { MainScene as MainSceneType } from '../scenes/MainScene';
 
-export default function Game() {
+interface GameProps {
+    mathQuestionsEnabled: boolean;
+}
+
+export default function Game({ mathQuestionsEnabled }: GameProps) {
     const gameRef = useRef<HTMLDivElement>(null);
     const [isLoading, setIsLoading] = useState(true);
+    const gameInstanceRef = useRef<Phaser.Game | null>(null);
 
     useEffect(() => {
         let game: Phaser.Game | null = null;
@@ -57,6 +63,8 @@ export default function Game() {
                     }
                 });
 
+                gameInstanceRef.current = game;
+
                 // Hide loading message when game starts
                 game.events.once('ready', () => {
                     setIsLoading(false);
@@ -85,6 +93,16 @@ export default function Game() {
             }
         };
     }, []);
+
+    // Update math questions enabled state
+    useEffect(() => {
+        if (gameInstanceRef.current) {
+            const mainScene = gameInstanceRef.current.scene.getScene('MainScene') as MainSceneType;
+            if (mainScene && 'setMathQuestionsEnabled' in mainScene) {
+                mainScene.setMathQuestionsEnabled(mathQuestionsEnabled);
+            }
+        }
+    }, [mathQuestionsEnabled]);
 
     return (
         <div 
