@@ -18,6 +18,8 @@ interface GameState {
     hasGuidedRockets: boolean;
     lastRocketTime: number;
     lastEliteEnemyTime: number;
+    currentStage: number;
+    isStageTransition: boolean;
 }
 
 enum EnemyType {
@@ -29,7 +31,8 @@ enum EnemyType {
     // Future enemy types
     BOMBER = 'bomber',
     STEALTH = 'stealth',
-    SHIELD = 'shield'
+    SHIELD = 'shield',
+    ELITE = 'elite'
 }
 
 interface ArrayQuestionFormat {
@@ -77,7 +80,9 @@ export class MainScene extends Phaser.Scene {
         gameCompleted: false,
         hasGuidedRockets: false,
         lastRocketTime: 0,
-        lastEliteEnemyTime: 0
+        lastEliteEnemyTime: 0,
+        currentStage: 1,
+        isStageTransition: false
     };
     private mathQuestionsEnabled: boolean = true;
 
@@ -131,6 +136,14 @@ export class MainScene extends Phaser.Scene {
         'multiplication_questions_2_3_4.json',
         'single_digit_multiplication_questions.json'
     ];
+
+    private stageTransitionUI: Phaser.GameObjects.Container | null = null;
+    private waveDirection: 'left' | 'right' = 'left';
+    private lastWaveSpawnTime: number = 0;
+    private waveSpawnDelay: number = 5000; // 5 seconds between waves
+
+    private healthPowerUps!: Phaser.Physics.Arcade.Group;
+    private readonly HEALTH_POWER_UP_AMOUNT = 20; // 20% health increase
 
     constructor() {
         super({ key: 'MainScene' });
@@ -200,6 +213,9 @@ export class MainScene extends Phaser.Scene {
                 console.error('Failed to load walker enemy texture');
             }
         });
+
+        //this.load.image('health-powerup', 'assets/skyforce_assets/PNG/Power-ups/powerupRed_heart.png');
+        this.load.image('powerup_health', 'assets/skyforce_assets/PNG/Power-ups/powerupBlue_star.png');
     }
 
     create() {
@@ -689,10 +705,30 @@ this.boss1 = this.physics.add.sprite(500, 500, 'boss1');
         this.setupCheckpointQuestions().catch(error => {
             console.error('Failed to setup checkpoint questions:', error);
         });
+
+        // Create health power-ups group
+        this.healthPowerUps = this.physics.add.group({
+            classType: Phaser.Physics.Arcade.Image,
+            maxSize: 5
+        });
+
+        // Add collision between player and health power-ups
+        this.physics.add.overlap(
+            this.player,
+            this.healthPowerUps,
+            (player: Phaser.GameObjects.GameObject | Phaser.Physics.Arcade.Body | Phaser.Physics.Arcade.StaticBody | Phaser.Tilemaps.Tile,
+             powerUp: Phaser.GameObjects.GameObject | Phaser.Physics.Arcade.Body | Phaser.Physics.Arcade.StaticBody | Phaser.Tilemaps.Tile) => {
+                if (powerUp instanceof Phaser.Physics.Arcade.Image) {
+                    this.handleHealthPowerUpCollision(powerUp);
+                }
+            },
+            undefined,
+            this
+        );
     }
 
     update(time: number, delta: number) {
-        if (this.gameState.isGameOver || this.gameState.isPaused || this.gameState.gameCompleted) {
+        if (this.gameState.isGameOver || this.gameState.isPaused || this.gameState.isStageTransition) {
             return;
         }
 
@@ -839,7 +875,11 @@ this.boss1 = this.physics.add.sprite(500, 500, 'boss1');
                 // Nuker enemies spawn more frequently (starts at 20000ms, minimum 10000ms)
                 const nukerSpawnRate = Math.max(10000, 20000 - Math.floor(timeMinutes) * 1000);
                 if (time > this.lastNukerSpawnTime + nukerSpawnRate) {
-                    this.spawnNukerEnemy();
+                    if (this.gameState.currentStage >= 2) {
+                        this.spawnNukerPair();
+                    } else {
+                        this.spawnNukerEnemy();
+                    }
                     this.lastNukerSpawnTime = time;
                 }
 
@@ -959,6 +999,18 @@ this.boss1 = this.physics.add.sprite(500, 500, 'boss1');
 
         if (this.isCheckpointActive) {
             this.updateScore(0);
+        }
+
+        // Spawn enemy waves in Stage 2
+        if (this.gameState.currentStage >= 2 && time > this.lastWaveSpawnTime + this.waveSpawnDelay) {
+            this.spawnEnemyWave();
+            this.lastWaveSpawnTime = time;
+        }
+
+        // Spawn nuker pairs in Stage 2
+        if (this.gameState.currentStage >= 2 && time > this.lastNukerSpawnTime + this.nukerSpawnDelay) {
+            this.spawnNukerPair();
+            this.lastNukerSpawnTime = time;
         }
     }
 
@@ -1080,25 +1132,29 @@ this.boss1 = this.physics.add.sprite(500, 500, 'boss1');
         bullet: Phaser.Physics.Arcade.Image,
         enemy: Phaser.Physics.Arcade.Sprite,
         enemyType: EnemyType
-    ) {
+    ): void {
         bullet.destroy();
 
         const health = (enemy.getData('health') || 0) - 1;
         enemy.setData('health', health);
-        
-        // Check if enemy should start moving down
-        if (enemy.getData('isHovering') && health <= enemy.getData('initialHealth') / 2) {
-            enemy.setData('isHovering', false);
-            this.tweens.killTweensOf(enemy);
-            
-            // Set downward velocity
-            const baseSpeed = Phaser.Math.Between(100, 200);
-            const timeBonus = Math.min(100, Math.floor(this.gameState.gameTime / 30000) * 20);
-            const speed = baseSpeed + timeBonus;
-            enemy.setVelocityY(speed);
-        }
 
         if (health <= 0) {
+            // Check if this is an elite enemy
+            const isEliteEnemy = [
+                EnemyType.LASER,
+                EnemyType.MISSILE,
+                EnemyType.NUKER,
+                EnemyType.WALKER,
+                EnemyType.ELITE
+            ].includes(enemyType);
+
+            if (isEliteEnemy) {
+                // 50% chance to spawn health power-up
+                if (Math.random() < 0.5) {
+                    this.spawnHealthPowerUp(enemy.x, enemy.y);
+                }
+            }
+
             switch (enemyType) {
                 case EnemyType.LASER:
                     this.destroyEnemy(enemy, true);
@@ -1771,35 +1827,269 @@ this.boss1 = this.physics.add.sprite(500, 500, 'boss1');
         // Check if boss is defeated
         if (this.bossHealth <= 0) {
             // Create epic explosion sequence
-            this.createBossDestructionSequence(boss);
-            
-            // Add score
-            this.updateScore(10000);
-
-            // Remove boss and health bar
-            boss.destroy();
-            this.bossHealthBar.destroy();
-            this.bossHealthText.destroy();
-            
-            // Mark the game as completed
-            this.gameState.gameCompleted = true;
-            
-            // Show stage completion message
-            const stageText = this.add.text(400, 300, 'Stage 1 Completed!\nYou Win!\n\nPress R to restart game', {
-                fontSize: '48px',
-                color: '#ffffff',
-                align: 'center'
-            });
-            stageText.setOrigin(0.5);
-            
-            // End boss fight
-            this.gameState.bossFight = false;
-            
-            // Clear all projectiles
-            this.enemyProjectiles.clear(true, true);
+            this.handleBossDefeat();
         }
     }
     
+    private handleBossDefeat(): void {
+        // Create epic explosion sequence
+        this.createBossDestructionSequence(this.bossEnemies.getChildren()[0] as Phaser.Physics.Arcade.Sprite);
+        
+        // Add score
+        this.updateScore(10000);
+
+        // Remove boss and health bar
+        this.bossEnemies.clear(true, true);
+        this.bossHealthBar?.destroy();
+        this.bossHealthText?.destroy();
+        
+        // Mark the game as completed
+        this.gameState.gameCompleted = true;
+        
+        // Show stage completion message
+        this.showStageTransition();
+        
+        // End boss fight
+        this.gameState.bossFight = false;
+        
+        // Clear all projectiles
+        this.enemyProjectiles.clear(true, true);
+    }
+
+    private showStageTransition(): void {
+        this.isPaused = true;
+        this.physics.pause();
+        this.gameState.isStageTransition = true;
+
+        // Create stage transition UI
+        this.stageTransitionUI = this.add.container(0, 0);
+        
+        // Add semi-transparent background
+        const overlay = this.add.rectangle(
+            0, 0,
+            this.cameras.main.width,
+            this.cameras.main.height,
+            0x000000,
+            0.8
+        ).setOrigin(0);
+        
+        // Add stage completion message
+        const stageText = this.add.text(
+            this.cameras.main.width / 2,
+            this.cameras.main.height / 2 - 50,
+            `Stage ${this.gameState.currentStage} Completed!\n\nProceed to Stage ${this.gameState.currentStage + 1}?`,
+            { fontSize: '32px', color: '#ffffff', align: 'center' }
+        ).setOrigin(0.5);
+        
+        // Add yes/no buttons
+        const yesButton = this.add.text(
+            this.cameras.main.width / 2 - 100,
+            this.cameras.main.height / 2 + 50,
+            'Yes',
+            { fontSize: '24px', color: '#00ff00' }
+        ).setOrigin(0.5).setInteractive();
+        
+        const noButton = this.add.text(
+            this.cameras.main.width / 2 + 100,
+            this.cameras.main.height / 2 + 50,
+            'No',
+            { fontSize: '24px', color: '#ff0000' }
+        ).setOrigin(0.5).setInteractive();
+        
+        // Add button hover effects
+        yesButton.on('pointerover', () => yesButton.setColor('#00cc00'));
+        yesButton.on('pointerout', () => yesButton.setColor('#00ff00'));
+        noButton.on('pointerover', () => noButton.setColor('#cc0000'));
+        noButton.on('pointerout', () => noButton.setColor('#ff0000'));
+        
+        // Handle button clicks
+        yesButton.on('pointerdown', () => {
+            this.proceedToNextStage();
+        });
+        
+        noButton.on('pointerdown', () => {
+            this.restartGame();
+        });
+        
+        this.stageTransitionUI.add([overlay, stageText, yesButton, noButton]);
+    }
+
+    private proceedToNextStage(): void {
+        // Clear the stage transition UI
+        if (this.stageTransitionUI) {
+            this.stageTransitionUI.destroy();
+            this.stageTransitionUI = null;
+        }
+        
+        // Update game state for next stage
+        this.gameState.currentStage++;
+        this.gameState.health = 100; // Restore full health
+        this.gameState.isStageTransition = false;
+        this.isPaused = false;
+        this.physics.resume();
+        
+        // Clear all enemies and projectiles
+        this.enemies.clear(true, true);
+        this.laserEnemies.clear(true, true);
+        this.missileEnemies.clear(true, true);
+        this.nukerEnemies.clear(true, true);
+        this.walkerEnemies.clear(true, true);
+        this.enemyLasers.clear(true, true);
+        this.enemyMissiles.clear(true, true);
+        this.enemyDebris.clear(true, true);
+        this.enemyProjectiles.clear(true, true);
+        
+        // Reset wave direction
+        this.waveDirection = 'left';
+        
+        // Show stage start message
+        const stageStartText = this.add.text(
+            this.cameras.main.width / 2,
+            this.cameras.main.height / 2,
+            `Stage ${this.gameState.currentStage} Start!`,
+            { fontSize: '32px', color: '#ffffff' }
+        ).setOrigin(0.5);
+        
+        // Remove the text after 2 seconds
+        this.time.delayedCall(2000, () => {
+            stageStartText.destroy();
+        });
+    }
+
+    private spawnEnemyWave(): void {
+        const numEnemies = 5;
+        const spacing = 100;
+        const startY = -50;
+        
+        // Determine starting x position based on wave direction
+        const startX = this.waveDirection === 'left' ? 
+            50 : // Start from left
+            Number(this.game.config.width) - 50; // Start from right
+        
+        // Spawn enemies in a line
+        for (let i = 0; i < numEnemies; i++) {
+            const x = this.waveDirection === 'left' ? 
+                startX + (i * spacing) : 
+                startX - (i * spacing);
+            
+            const enemy = this.enemies.create(x, startY, 'enemy') as Phaser.Physics.Arcade.Sprite;
+            
+            if (enemy) {
+                enemy.setScale(0.25);
+                enemy.setData('initialHealth', 1);
+                enemy.setData('health', 1);
+                
+                // Set velocity based on wave direction
+                const baseSpeed = Phaser.Math.Between(100, 200);
+                const timeBonus = Math.min(100, Math.floor(this.gameState.gameTime / 30000) * 20);
+                const speed = baseSpeed + timeBonus;
+                
+                enemy.setVelocityY(speed);
+                
+                // Add wave motion
+                const startX = enemy.x;
+                const amplitude = 50;
+                const frequency = 0.003;
+                
+                this.time.addEvent({
+                    delay: 16,
+                    loop: true,
+                    callback: () => {
+                        if (enemy.active) {
+                            enemy.x = startX + Math.sin(enemy.y * frequency) * amplitude;
+                        }
+                    }
+                });
+            }
+        }
+        
+        // Toggle wave direction for next wave
+        this.waveDirection = this.waveDirection === 'left' ? 'right' : 'left';
+    }
+
+    private spawnNukerPair(): void {
+        // Spawn two nukers on opposite sides
+        const leftNuker = this.nukerEnemies.create(100, -100, 'nuker-enemy') as Phaser.Physics.Arcade.Sprite;
+        const rightNuker = this.nukerEnemies.create(
+            Number(this.game.config.width) - 100,
+            -100,
+            'nuker-enemy'
+        ) as Phaser.Physics.Arcade.Sprite;
+        
+        [leftNuker, rightNuker].forEach((nuker) => {
+            if (nuker) {
+                nuker.setScale(0.8);
+                nuker.setData('initialHealth', 14); // Double the health
+                nuker.setData('health', 14);
+                nuker.setData('isHovering', true);
+                
+                // Initial hover position
+                this.tweens.add({
+                    targets: nuker,
+                    y: 120,
+                    duration: 1500,
+                    ease: 'Power2',
+                    onComplete: () => {
+                        if (nuker.active) {
+                            // Add hover effect
+                            this.tweens.add({
+                                targets: nuker,
+                                y: '+=20',
+                                duration: 2000,
+                                yoyo: true,
+                                repeat: -1
+                            });
+                            
+                            // Start double burst attack
+                            this.startNukerDoubleBurst(nuker);
+                        }
+                    }
+                });
+            }
+        });
+    }
+
+    private startNukerDoubleBurst(nuker: Phaser.Physics.Arcade.Sprite): void {
+        // First burst
+        this.time.delayedCall(1000, () => {
+            if (nuker.active) {
+                this.createNukerBurst(nuker);
+                
+                // Second burst after 1 second
+                this.time.delayedCall(1000, () => {
+                    if (nuker.active) {
+                        this.createNukerBurst(nuker);
+                    }
+                });
+            }
+        });
+    }
+
+    private createNukerBurst(nuker: Phaser.Physics.Arcade.Sprite): void {
+        const numProjectiles = 8;
+        
+        for (let i = 0; i < numProjectiles; i++) {
+            const angle = (i * Math.PI * 2) / numProjectiles;
+            const projectile = this.enemyProjectiles.create(
+                nuker.x,
+                nuker.y + 20,
+                'boss-bomb'
+            ) as Phaser.Physics.Arcade.Image;
+            
+            if (projectile) {
+                projectile.setScale(0.6);
+                projectile.setData('damage', 10);
+                
+                // Set velocity in spread pattern
+                const speed = 200;
+                projectile.setVelocity(
+                    Math.cos(angle) * speed,
+                    Math.sin(angle) * speed
+                );
+            }
+        }
+    }
+
     private createBossDestructionSequence(boss: Phaser.Physics.Arcade.Sprite) {
         // Create multiple explosion waves
         for (let wave = 0; wave < 3; wave++) {
@@ -2459,5 +2749,70 @@ this.boss1 = this.physics.add.sprite(500, 500, 'boss1');
     public setMathQuestionsEnabled(enabled: boolean): void {
         console.log(`Math questions ${enabled ? 'enabled' : 'disabled'}`);
         this.mathQuestionsEnabled = enabled;
+    }
+
+    private spawnHealthPowerUp(x: number, y: number): void {
+        console.log('Spawning health power-up at', x, y);
+        const powerUp = this.healthPowerUps.create(x, y, 'powerup_health');
+        
+        // Set velocity for floating down effect
+        powerUp.setVelocity(0, 50);
+        
+        // Add gentle floating animation
+        this.tweens.add({
+            targets: powerUp,
+            x: x + 20,
+            duration: 1000,
+            ease: 'Sine.easeInOut',
+            yoyo: true,
+            repeat: -1
+        });
+        
+        // Auto-destroy after 10 seconds if not collected
+        this.time.delayedCall(10000, () => {
+            if (powerUp.active) {
+                powerUp.destroy();
+            }
+        });
+    }
+
+    private handleHealthPowerUpCollision(powerUp: Phaser.Physics.Arcade.Image): void {
+        // Play collection sound
+        this.explosionSound.play({ volume: 0.3 });
+        
+        // Create collection effect
+        const effect = this.add.sprite(powerUp.x, powerUp.y, 'explosion1');
+        effect.setScale(0.3);
+        effect.play('explosion');
+        effect.once('animationcomplete', () => {
+            effect.destroy();
+        });
+        
+        // Increase health
+        const newHealth = Math.min(100, this.gameState.health + this.HEALTH_POWER_UP_AMOUNT);
+        this.gameState.health = newHealth;
+        this.healthText.setText(`Health: ${newHealth}%`);
+        
+        // Show health increase text
+        const healthText = this.add.text(
+            powerUp.x,
+            powerUp.y - 30,
+            `+${this.HEALTH_POWER_UP_AMOUNT}% Health`,
+            { fontSize: '16px', color: '#00ff00' }
+        ).setOrigin(0.5);
+        
+        // Animate and remove text
+        this.tweens.add({
+            targets: healthText,
+            y: healthText.y - 50,
+            alpha: 0,
+            duration: 1000,
+            onComplete: () => {
+                healthText.destroy();
+            }
+        });
+        
+        // Destroy power-up
+        powerUp.destroy();
     }
 } 
