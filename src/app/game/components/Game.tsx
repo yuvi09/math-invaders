@@ -36,9 +36,9 @@ export default function Game({ mathQuestionsEnabled }: GameProps) {
                 game = new Phaser.Game({
                     type: Phaser.AUTO,
                     parent: gameRef.current,
-                    width: 800,
-                    height: 600,
                     backgroundColor: '#000000',
+                    width: window.innerWidth,
+                    height: window.innerHeight,
                     physics: {
                         default: 'arcade',
                         arcade: {
@@ -47,13 +47,12 @@ export default function Game({ mathQuestionsEnabled }: GameProps) {
                         }
                     },
                     scale: {
-                        mode: Phaser.Scale.FIT,
+                        mode: Phaser.Scale.RESIZE,
                         autoCenter: Phaser.Scale.CENTER_BOTH,
-                        width: 800,
-                        height: 600
+                        parent: gameRef.current,
+                        expandParent: true,
                     },
                     scene: MainScene,
-                    // Add render settings to help with WebGL issues
                     render: {
                         antialias: false,
                         pixelArt: true,
@@ -69,6 +68,22 @@ export default function Game({ mathQuestionsEnabled }: GameProps) {
                 game.events.once('ready', () => {
                     setIsLoading(false);
                 });
+
+                // Add resize handler
+                const resizeGame = () => {
+                    if (game && game.scale) {
+                        game.scale.resize(window.innerWidth, window.innerHeight);
+                    }
+                };
+
+                window.addEventListener('resize', resizeGame);
+                
+                // Add cleanup for resize handler
+                const originalCleanup = cleanup;
+                cleanup = () => {
+                    window.removeEventListener('resize', resizeGame);
+                    if (originalCleanup) originalCleanup();
+                };
 
                 // Return cleanup function
                 return () => {
@@ -107,8 +122,13 @@ export default function Game({ mathQuestionsEnabled }: GameProps) {
     return (
         <div 
             ref={gameRef}
-            className="w-full h-full flex items-center justify-center bg-black"
-            style={{ touchAction: 'none' }}
+            className="w-screen h-screen flex items-center justify-center bg-black"
+            style={{ 
+                touchAction: 'none',
+                margin: 0,
+                padding: 0,
+                overflow: 'hidden'
+            }}
         >
             {isLoading && (
                 <div className="text-white text-xl absolute inset-0 flex items-center justify-center z-10">

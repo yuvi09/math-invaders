@@ -220,11 +220,33 @@ export class MainScene extends Phaser.Scene {
 
     create() {
         // Create scrolling background
-        const gameWidth = this.game.config.width as number;
-        const gameHeight = this.game.config.height as number;
+        const gameWidth = this.scale.width;
+        const gameHeight = this.scale.height;
+        
+        // Create background with proper dimensions
         this.background = this.add.tileSprite(0, 0, gameWidth, gameHeight, 'background');
         this.background.setOrigin(0, 0);
         
+        // Handle resize events
+        this.scale.on('resize', (gameSize: Phaser.Structs.Size) => {
+            const width = gameSize.width;
+            const height = gameSize.height;
+            
+            // Update background
+            this.background.setSize(width, height);
+            
+            // Update camera
+            this.cameras.main.setViewport(0, 0, width, height);
+            
+            // Recenter UI elements if they exist
+            if (this.pauseText) {
+                this.pauseText.setPosition(width / 2, height / 2);
+            }
+            if (this.gameOverText) {
+                this.gameOverText.setPosition(width / 2, height / 2);
+            }
+        });
+
         // Enable crisp pixels for pixel art
         this.cameras.main.setRoundPixels(true);
         
