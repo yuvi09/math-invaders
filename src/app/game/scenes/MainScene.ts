@@ -227,6 +227,9 @@ export class MainScene extends Phaser.Scene {
         this.background = this.add.tileSprite(0, 0, gameWidth, gameHeight, 'background');
         this.background.setOrigin(0, 0);
         
+        // Set physics world bounds to match the game size
+        this.physics.world.setBounds(0, 0, gameWidth, gameHeight);
+        
         // Handle resize events
         this.scale.on('resize', (gameSize: Phaser.Structs.Size) => {
             const width = gameSize.width;
@@ -238,6 +241,22 @@ export class MainScene extends Phaser.Scene {
             // Update camera
             this.cameras.main.setViewport(0, 0, width, height);
             
+            // Update physics world bounds to match new size
+            this.physics.world.setBounds(0, 0, width, height);
+            
+            // Update player bounds
+            if (this.player) {
+                this.player.setCollideWorldBounds(true);
+                const playerHeight = this.player.displayHeight;
+                const minY = height * 0.33; // Top 1/3 of screen off limits
+                const maxY = height - playerHeight;
+                
+                // Ensure player stays within bounds after resize
+                this.player.y = Phaser.Math.Clamp(this.player.y, minY, maxY);
+                // Set body size to match display size after resize
+                this.player.setBodySize(this.player.displayWidth, this.player.displayHeight, true);
+            }
+            
             // Recenter UI elements if they exist
             if (this.pauseText) {
                 this.pauseText.setPosition(width / 2, height / 2);
@@ -246,15 +265,16 @@ export class MainScene extends Phaser.Scene {
                 this.gameOverText.setPosition(width / 2, height / 2);
             }
         });
-
-        // Enable crisp pixels for pixel art
-        this.cameras.main.setRoundPixels(true);
         
         // Create player with proper scale and physics
-        this.player = this.physics.add.sprite(500, 600, 'player');  // Adjusted starting position for larger area
+        const playerStartX = gameWidth / 2;
+        const playerStartY = gameHeight * 0.8; // Start at 80% of screen height
+        this.player = this.physics.add.sprite(playerStartX, playerStartY, 'player');
         this.player.setCollideWorldBounds(true);
-        this.player.setScale(0.1);  // Made ship smaller
-        this.player.setAngle(0);  // No rotation needed - ship faces upward naturally
+        this.player.setScale(0.1);
+        this.player.setAngle(0);
+        // Set body size to match display size
+        this.player.setBodySize(this.player.displayWidth, this.player.displayHeight, true);
 
         // Setup input
         this.cursors = this.input.keyboard!.createCursorKeys();
@@ -268,20 +288,17 @@ export class MainScene extends Phaser.Scene {
         // Add touch/trackpad controls with enhanced movement
         this.input.on('pointermove', (pointer: Phaser.Input.Pointer) => {
             if (pointer.isDown || pointer.x !== pointer.prevPosition.x || pointer.y !== pointer.prevPosition.y) {
-                // Get game bounds
-                const gameWidth = Number(this.game.config.width);
-                const gameHeight = Number(this.game.config.height);
+                const playerHeight = this.player.displayHeight;
+                const minY = gameHeight * 0.33; // Top 1/3 of screen off limits
+                const maxY = gameHeight - playerHeight;
                 
                 // Calculate target position with proper bounds
                 const targetX = Phaser.Math.Clamp(
                     pointer.x,
-                    this.player.width * this.player.scale * 0.5,
-                    gameWidth - this.player.width * this.player.scale * 0.5
+                    this.player.displayWidth / 2,
+                    gameWidth - this.player.displayWidth / 2
                 );
                 
-                // Add vertical movement but restrict to bottom 2/3 of screen
-                const minY = gameHeight * 0.33; // Top 1/3 of screen off limits
-                const maxY = gameHeight - this.player.height * this.player.scale * 0.5;
                 const targetY = Phaser.Math.Clamp(
                     pointer.y,
                     minY,
@@ -306,18 +323,16 @@ export class MainScene extends Phaser.Scene {
 
         // Add pointer down support for tap-to-move
         this.input.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
-            // Same logic as pointermove but allows for tap-to-move
-            const gameWidth = Number(this.game.config.width);
-            const gameHeight = Number(this.game.config.height);
+            const playerHeight = this.player.displayHeight;
+            const minY = gameHeight * 0.33;
+            const maxY = gameHeight - playerHeight;
             
             const targetX = Phaser.Math.Clamp(
                 pointer.x,
-                this.player.width * this.player.scale * 0.5,
-                gameWidth - this.player.width * this.player.scale * 0.5
+                this.player.displayWidth / 2,
+                gameWidth - this.player.displayWidth / 2
             );
             
-            const minY = gameHeight * 0.33;
-            const maxY = gameHeight - this.player.height * this.player.scale * 0.5;
             const targetY = Phaser.Math.Clamp(
                 pointer.y,
                 minY,
@@ -788,7 +803,7 @@ this.boss1 = this.physics.add.sprite(500, 500, 'boss1');
                     this.player.setVelocityY(0);
                 }
             } else if (this.cursors.down.isDown) {
-                const maxY = Number(this.game.config.height) - this.player.height * this.player.scale * 0.5;
+                const maxY = Number(this.game.config.height) - this.player.displayHeight / 2;
                 if (this.player.y < maxY) {
                     this.player.setVelocityY(this.speed);
                 } else {
@@ -1034,6 +1049,14 @@ this.boss1 = this.physics.add.sprite(500, 500, 'boss1');
             this.spawnNukerPair();
             this.lastNukerSpawnTime = time;
         }
+
+        // --- PLAYER CLAMP DEBUG ---
+        // Only clamp Y to restrict the top 1/3, let physics handle X
+        const minY = Number(this.game.config.height) * 0.33;
+        const maxY = Number(this.game.config.height) - this.player.displayHeight / 2;
+        if (this.player.y < minY) this.player.y = minY;
+        if (this.player.y > maxY) this.player.y = maxY;
+        // --- END PLAYER CLAMP DEBUG ---
     }
 
     private shoot() {
@@ -2775,27 +2798,44 @@ this.boss1 = this.physics.add.sprite(500, 500, 'boss1');
 
     private spawnHealthPowerUp(x: number, y: number): void {
         console.log('Spawning health power-up at', x, y);
-        const powerUp = this.healthPowerUps.create(x, y, 'powerup_health');
         
-        // Set velocity for floating down effect
-        powerUp.setVelocity(0, 50);
+        // Initialize healthPowerUps group if it doesn't exist
+        if (!this.healthPowerUps) {
+            this.healthPowerUps = this.physics.add.group({
+                classType: Phaser.Physics.Arcade.Image,
+                maxSize: 5
+            });
+        }
         
-        // Add gentle floating animation
-        this.tweens.add({
-            targets: powerUp,
-            x: x + 20,
-            duration: 1000,
-            ease: 'Sine.easeInOut',
-            yoyo: true,
-            repeat: -1
-        });
-        
-        // Auto-destroy after 10 seconds if not collected
-        this.time.delayedCall(10000, () => {
-            if (powerUp.active) {
-                powerUp.destroy();
+        try {
+            const powerUp = this.healthPowerUps.create(x, y, 'powerup_health') as Phaser.Physics.Arcade.Image;
+            
+            if (powerUp && powerUp.active) {
+                // Set velocity for floating down effect
+                powerUp.setVelocity(0, 50);
+                
+                // Add gentle floating animation
+                this.tweens.add({
+                    targets: powerUp,
+                    x: x + 20,
+                    duration: 1000,
+                    ease: 'Sine.easeInOut',
+                    yoyo: true,
+                    repeat: -1
+                });
+                
+                // Auto-destroy after 10 seconds if not collected
+                this.time.delayedCall(10000, () => {
+                    if (powerUp && powerUp.active) {
+                        powerUp.destroy();
+                    }
+                });
+            } else {
+                console.warn('Failed to create power-up or power-up not active');
             }
-        });
+        } catch (error) {
+            console.error('Error spawning health power-up:', error);
+        }
     }
 
     private handleHealthPowerUpCollision(powerUp: Phaser.Physics.Arcade.Image): void {
