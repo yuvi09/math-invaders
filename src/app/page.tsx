@@ -4,7 +4,7 @@ import { useState } from 'react';
 import Game from './game/components/Game';
 
 export default function Home() {
-    const [mathQuestionsEnabled, setMathQuestionsEnabled] = useState(true);
+    const [mathQuestionsEnabled, setMathQuestionsEnabled] = useState(false);
 
     return (
         <main className="w-full h-full flex flex-col items-center justify-center bg-gray-900 p-2 sm:p-4">

@@ -5,10 +5,10 @@ import type Phaser from 'phaser';
 import type { MainScene as MainSceneType } from '../scenes/MainScene';
 
 interface GameProps {
-    mathQuestionsEnabled: boolean;
+    mathQuestionsEnabled?: boolean;
 }
 
-export default function Game({ mathQuestionsEnabled }: GameProps) {
+export default function Game({ mathQuestionsEnabled = false }: GameProps) {
     const gameRef = useRef<HTMLDivElement>(null);
     const [isLoading, setIsLoading] = useState(true);
     const gameInstanceRef = useRef<Phaser.Game | null>(null);

@@ -88,7 +88,7 @@ export class MainScene extends Phaser.Scene {
         isGodMode: false,
         godModeEndTime: 0
     };
-    private mathQuestionsEnabled: boolean = true;
+    private mathQuestionsEnabled: boolean = false;
 
     private lastShootTime: number = 0;
     private lastEnemySpawnTime: number = 0;
