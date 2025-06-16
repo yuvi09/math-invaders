@@ -20,6 +20,8 @@ interface GameState {
     lastEliteEnemyTime: number;
     currentStage: number;
     isStageTransition: boolean;
+    isGodMode: boolean;
+    godModeEndTime: number;
 }
 
 enum EnemyType {
@@ -82,7 +84,9 @@ export class MainScene extends Phaser.Scene {
         lastRocketTime: 0,
         lastEliteEnemyTime: 0,
         currentStage: 1,
-        isStageTransition: false
+        isStageTransition: false,
+        isGodMode: false,
+        godModeEndTime: 0
     };
     private mathQuestionsEnabled: boolean = true;
 
@@ -144,6 +148,14 @@ export class MainScene extends Phaser.Scene {
 
     private healthPowerUps!: Phaser.Physics.Arcade.Group;
     private readonly HEALTH_POWER_UP_AMOUNT = 20; // 20% health increase
+
+    private godModeText!: Phaser.GameObjects.Text;
+    private godModeTimer: number = 0;
+    private godModeDuration: number = 30000; // 30 seconds in milliseconds
+    private godModeShootDelay: number = 50; // Much faster shooting in god mode
+    private godModeLaserDelay: number = 400; // 5x faster laser rate
+    private godModeActive: boolean = false;
+    private godModeEndTime: number = 0;
 
     constructor() {
         super({ key: 'MainScene' });
@@ -762,6 +774,12 @@ this.boss1 = this.physics.add.sprite(500, 500, 'boss1');
             undefined,
             this
         );
+
+        this.godModeText = this.add.text(16, 80, '', { 
+            fontSize: '24px', 
+            color: '#ff0000',
+            fontStyle: 'bold'
+        }).setDepth(1000);
     }
 
     update(time: number, delta: number) {
@@ -1057,27 +1075,70 @@ this.boss1 = this.physics.add.sprite(500, 500, 'boss1');
         if (this.player.y < minY) this.player.y = minY;
         if (this.player.y > maxY) this.player.y = maxY;
         // --- END PLAYER CLAMP DEBUG ---
+
+        if (this.godModeActive) {
+            const remainingTime = Math.max(0, Math.ceil((this.godModeEndTime - time) / 1000));
+            this.godModeText.setText(`GOD MODE: ${remainingTime}s`);
+            
+            if (time >= this.godModeEndTime) {
+                this.deactivateGodMode();
+            }
+        }
     }
 
     private shoot() {
+        const currentTime = this.time.now;
+        const shootDelay = this.godModeActive ? this.godModeShootDelay : this.shootDelay;
+
+        if (currentTime - this.lastShootTime < shootDelay) {
+            return;
+        }
+
+        this.lastShootTime = currentTime;
         this.shootSound.play();
 
-        // Multiple bullets based on firepower
-        const spread = (this.gameState.firepower - 1) * 10;
-        for (let i = 0; i < this.gameState.firepower; i++) {
-            const xOffset = (i - (this.gameState.firepower - 1) / 2) * spread;
-            const bullet = this.bullets.create(
-                this.player.x + xOffset,
-                this.player.y - 20,
-                'bullet'
-            ) as Phaser.Physics.Arcade.Image;
-            
-            if (bullet) {
-                bullet.setVelocityY(-400);
-                bullet.setScale(0.5);
+        if (this.godModeActive) {
+            // V-shaped spread pattern in god mode
+            const angles = [-15, 0, 15]; // Three bullets at different angles
+            angles.forEach(angle => {
+                const bullet = this.bullets.create(
+                    this.player.x,
+                    this.player.y - 20,
+                    'bullet'
+                ) as Phaser.Physics.Arcade.Image;
+                
+                if (bullet) {
+                    bullet.setActive(true);
+                    bullet.setVisible(true);
+                    bullet.setVelocityY(-600);
+                    bullet.setScale(0.5);
+                    // Apply rotation for spread pattern
+                    bullet.setRotation(Phaser.Math.DegToRad(angle));
+                    // Adjust velocity based on angle
+                    const rad = Phaser.Math.DegToRad(angle);
+                    bullet.setVelocityX(Math.sin(rad) * 200);
+                }
+            });
+        } else {
+            // Regular shooting pattern
+            const spread = (this.gameState.firepower - 1) * 10;
+            for (let i = 0; i < this.gameState.firepower; i++) {
+                const xOffset = (i - (this.gameState.firepower - 1) / 2) * spread;
+                const bullet = this.bullets.create(
+                    this.player.x + xOffset,
+                    this.player.y - 20,
+                    'bullet'
+                ) as Phaser.Physics.Arcade.Image;
+                
+                if (bullet) {
+                    bullet.setActive(true);
+                    bullet.setVisible(true);
+                    bullet.setVelocityY(-400);
+                    bullet.setScale(0.5);
+                }
             }
         }
-        
+
         // Fire guided rockets if we have them and it's time
         if (this.gameState.hasGuidedRockets) {
             const currentTime = this.time.now;
@@ -1250,6 +1311,9 @@ this.boss1 = this.physics.add.sprite(500, 500, 'boss1');
     }
 
     private handlePlayerLaserHit() {
+        if (this.godModeActive) {
+            return; // Player is immune in god mode
+        }
         this.gameState.health = Math.max(0, this.gameState.health - 20);
         
         if (this.gameState.health <= 0) {
@@ -1475,6 +1539,9 @@ this.boss1 = this.physics.add.sprite(500, 500, 'boss1');
     }
 
     private handlePlayerDebrisHit() {
+        if (this.godModeActive) {
+            return; // Player is immune in god mode
+        }
         this.gameState.health = Math.max(0, this.gameState.health - 10);
         
         if (this.gameState.health <= 0) {
@@ -1546,6 +1613,9 @@ this.boss1 = this.physics.add.sprite(500, 500, 'boss1');
     }
 
     private handlePlayerWalkerHit() {
+        if (this.godModeActive) {
+            return; // Player is immune in god mode
+        }
         this.gameState.health = Math.max(0, this.gameState.health - 5);
         
         if (this.gameState.health <= 0) {
@@ -2876,5 +2946,36 @@ this.boss1 = this.physics.add.sprite(500, 500, 'boss1');
         
         // Destroy power-up
         powerUp.destroy();
+    }
+
+    private activateGodMode() {
+        this.godModeActive = true;
+        this.godModeEndTime = this.time.now + this.godModeDuration;
+        this.godModeText.setVisible(true);
+        
+        // Visual effect for god mode
+        this.tweens.add({
+            targets: this.player,
+            alpha: 0.7,
+            duration: 200,
+            yoyo: true,
+            repeat: -1
+        });
+    }
+
+    private deactivateGodMode() {
+        this.godModeActive = false;
+        this.godModeText.setVisible(false);
+        this.tweens.killTweensOf(this.player);
+        this.player.setAlpha(1);
+    }
+
+    // Add this method to handle the god mode command
+    public handleCommand(command: string) {
+        if (command === '//g') {
+            this.activateGodMode();
+            return true;
+        }
+        return false;
     }
 } 

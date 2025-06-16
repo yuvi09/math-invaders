@@ -12,6 +12,47 @@ export default function Game({ mathQuestionsEnabled }: GameProps) {
     const gameRef = useRef<HTMLDivElement>(null);
     const [isLoading, setIsLoading] = useState(true);
     const gameInstanceRef = useRef<Phaser.Game | null>(null);
+    const commandBufferRef = useRef<string>('');
+    const lastKeyPressTimeRef = useRef<number>(0);
+
+    // Handle command input
+    useEffect(() => {
+        const handleKeyPress = (e: KeyboardEvent) => {
+            const currentTime = Date.now();
+            
+            // Reset command buffer if more than 2 seconds between keypresses
+            if (currentTime - lastKeyPressTimeRef.current > 2000) {
+                commandBufferRef.current = '';
+            }
+            
+            lastKeyPressTimeRef.current = currentTime;
+            
+            // Add character to command buffer
+            commandBufferRef.current += e.key;
+            
+            // Check for god mode command
+            if (commandBufferRef.current === '//g') {
+                if (gameInstanceRef.current) {
+                    const mainScene = gameInstanceRef.current.scene.getScene('MainScene') as MainSceneType;
+                    if (mainScene && 'handleCommand' in mainScene) {
+                        mainScene.handleCommand('//g');
+                    }
+                }
+                commandBufferRef.current = ''; // Reset buffer after command
+            }
+            
+            // Reset buffer if it gets too long
+            if (commandBufferRef.current.length > 10) {
+                commandBufferRef.current = '';
+            }
+        };
+
+        window.addEventListener('keydown', handleKeyPress);
+        
+        return () => {
+            window.removeEventListener('keydown', handleKeyPress);
+        };
+    }, []);
 
     useEffect(() => {
         let game: Phaser.Game | null = null;
