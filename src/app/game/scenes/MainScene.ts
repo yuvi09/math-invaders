@@ -22,6 +22,8 @@ interface GameState {
     isStageTransition: boolean;
     isGodMode: boolean;
     godModeEndTime: number;
+    godModeUsesRemaining: number;
+    lastGodModeUseTime: number;
 }
 
 enum EnemyType {
@@ -86,7 +88,9 @@ export class MainScene extends Phaser.Scene {
         currentStage: 1,
         isStageTransition: false,
         isGodMode: false,
-        godModeEndTime: 0
+        godModeEndTime: 0,
+        godModeUsesRemaining: 5,
+        lastGodModeUseTime: 0
     };
     private mathQuestionsEnabled: boolean = false;
 
@@ -156,6 +160,10 @@ export class MainScene extends Phaser.Scene {
     private godModeLaserDelay: number = 400; // 5x faster laser rate
     private godModeActive: boolean = false;
     private godModeEndTime: number = 0;
+
+    private readonly MAX_GOD_MODE_USES = 5;
+    private readonly GOD_MODE_COOLDOWN = 180000; // 3 minutes in milliseconds
+    private godModeCooldownText!: Phaser.GameObjects.Text;
 
     constructor() {
         super({ key: 'MainScene' });
@@ -780,6 +788,16 @@ this.boss1 = this.physics.add.sprite(500, 500, 'boss1');
             color: '#ff0000',
             fontStyle: 'bold'
         }).setDepth(1000);
+
+        this.godModeCooldownText = this.add.text(16, 110, '', {
+            fontSize: '20px',
+            color: '#ff0000',
+            fontStyle: 'bold'
+        }).setDepth(1000).setVisible(false);
+
+        // Initialize God Mode state
+        this.gameState.godModeUsesRemaining = this.MAX_GOD_MODE_USES;
+        this.gameState.lastGodModeUseTime = -this.GOD_MODE_COOLDOWN; // Initialize to be off cooldown
     }
 
     update(time: number, delta: number) {
@@ -1082,6 +1100,15 @@ this.boss1 = this.physics.add.sprite(500, 500, 'boss1');
             
             if (time >= this.godModeEndTime) {
                 this.deactivateGodMode();
+            }
+        } else if (this.gameState.godModeUsesRemaining < this.MAX_GOD_MODE_USES) {
+            const timeSinceLastUse = time - this.gameState.lastGodModeUseTime;
+            if (timeSinceLastUse < this.GOD_MODE_COOLDOWN) {
+                const remainingCooldown = Math.ceil((this.GOD_MODE_COOLDOWN - timeSinceLastUse) / 1000);
+                this.godModeCooldownText.setText(`God Mode Cooldown: ${remainingCooldown}s`);
+                this.godModeCooldownText.setVisible(true);
+            } else {
+                this.godModeCooldownText.setVisible(false);
             }
         }
     }
@@ -2069,6 +2096,10 @@ this.boss1 = this.physics.add.sprite(500, 500, 'boss1');
         this.time.delayedCall(2000, () => {
             stageStartText.destroy();
         });
+
+        // Reset God Mode uses for new stage
+        this.gameState.godModeUsesRemaining = this.MAX_GOD_MODE_USES;
+        this.gameState.lastGodModeUseTime = -this.GOD_MODE_COOLDOWN; // Reset to be off cooldown
     }
 
     private spawnEnemyWave(): void {
@@ -2949,9 +2980,30 @@ this.boss1 = this.physics.add.sprite(500, 500, 'boss1');
     }
 
     private activateGodMode() {
+        const currentTime = this.time.now;
+        
+        // Check if we can use God Mode
+        if (this.gameState.godModeUsesRemaining <= 0) {
+            // Show message that no uses remaining
+            this.showTemporaryMessage('No God Mode uses remaining!', 2000);
+            return;
+        }
+
+        if (currentTime - this.gameState.lastGodModeUseTime < this.GOD_MODE_COOLDOWN) {
+            // Show cooldown message
+            const remainingCooldown = Math.ceil((this.GOD_MODE_COOLDOWN - (currentTime - this.gameState.lastGodModeUseTime)) / 1000);
+            this.showTemporaryMessage(`God Mode on cooldown! ${remainingCooldown}s remaining`, 2000);
+            return;
+        }
+
         this.godModeActive = true;
-        this.godModeEndTime = this.time.now + this.godModeDuration;
+        this.godModeEndTime = currentTime + this.godModeDuration;
         this.godModeText.setVisible(true);
+        this.godModeCooldownText.setVisible(false);
+        
+        // Update usage tracking
+        this.gameState.godModeUsesRemaining--;
+        this.gameState.lastGodModeUseTime = currentTime;
         
         // Visual effect for god mode
         this.tweens.add({
@@ -2961,6 +3013,9 @@ this.boss1 = this.physics.add.sprite(500, 500, 'boss1');
             yoyo: true,
             repeat: -1
         });
+
+        // Show remaining uses
+        this.showTemporaryMessage(`God Mode uses remaining: ${this.gameState.godModeUsesRemaining}`, 2000);
     }
 
     private deactivateGodMode() {
@@ -2977,5 +3032,25 @@ this.boss1 = this.physics.add.sprite(500, 500, 'boss1');
             return true;
         }
         return false;
+    }
+
+    private showTemporaryMessage(message: string, duration: number) {
+        const text = this.add.text(this.cameras.main.centerX, this.cameras.main.centerY, message, {
+            fontSize: '32px',
+            color: '#ffffff',
+            fontStyle: 'bold',
+            stroke: '#000000',
+            strokeThickness: 4
+        }).setOrigin(0.5).setDepth(1000);
+
+        this.tweens.add({
+            targets: text,
+            alpha: 0,
+            y: text.y - 50,
+            duration: duration,
+            onComplete: () => {
+                text.destroy();
+            }
+        });
     }
 } 
