@@ -1029,8 +1029,8 @@ this.boss1 = this.physics.add.sprite(500, 500, 'boss1');
                 this.spawnFirecrackerBoss();
             }
 
-            // Check for tentacle boss spawn conditions - Stage 2 Boss at 40,000 points
-            if (this.gameState.score >= 40000 && this.gameState.currentStage === 2 && !this.gameState.bossFight && !this.gameState.gameCompleted) {
+            // Check for tentacle boss spawn conditions - Stage 2 Boss at 60,000 points
+            if (this.gameState.score >= 60000 && this.gameState.currentStage === 2 && !this.gameState.bossFight && !this.gameState.gameCompleted) {
                 console.log('Spawning Tentacle Boss - Score:', this.gameState.score, 'Stage:', this.gameState.currentStage);
                 
                 // Clear all existing enemies before spawning boss
@@ -1047,7 +1047,7 @@ this.boss1 = this.physics.add.sprite(500, 500, 'boss1');
             }
             
             // Debug logging for boss spawn conditions
-            if (this.gameState.score >= 35000 && this.gameState.score <= 45000) {
+            if (this.gameState.score >= 55000 && this.gameState.score <= 65000) {
                 // Only log occasionally to avoid spam
                 if (Math.floor(this.gameState.gameTime / 1000) % 5 === 0 && this.gameState.gameTime % 1000 < 50) {
                     console.log('Boss spawn check - Score:', this.gameState.score, 'Stage:', this.gameState.currentStage, 'Boss Fight:', this.gameState.bossFight, 'Game Completed:', this.gameState.gameCompleted);
