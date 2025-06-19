@@ -101,6 +101,8 @@ export class MainScene extends Phaser.Scene {
     private lastLaserShootTime: number = 0;
     private lastMissileShootTime: number = 0;
     private shootDelay: number = 167; // Reduced from 250 to increase fire rate by 50%
+    private baseShootDelay: number = 167; // Store original delay
+    private enhancedFireActive: boolean = false;
     private enemySpawnDelay: number = 2000;
     private laserEnemySpawnDelay: number = 15000;
     private missileEnemySpawnDelay: number = 12000; // Missile enemy every 12 seconds
@@ -117,6 +119,7 @@ export class MainScene extends Phaser.Scene {
     private explosionSound!: Phaser.Sound.BaseSound;
     private bossExplosionSound!: Phaser.Sound.BaseSound;
     private firecrackerSound!: Phaser.Sound.BaseSound;
+    private backgroundMusic!: Phaser.Sound.BaseSound;
 
     private bossEnemies!: Phaser.Physics.Arcade.Group;
     private enemyProjectiles!: Phaser.Physics.Arcade.Group;
@@ -228,6 +231,76 @@ export class MainScene extends Phaser.Scene {
         this.background.setDepth(-1);
     }
 
+    private activateEnhancedFire(): void {
+        this.enhancedFireActive = true;
+        this.shootDelay = this.baseShootDelay / 2; // Double the fire rate (half the delay)
+        
+        console.log(`Enhanced Fire Activated! Fire rate doubled from ${this.baseShootDelay}ms to ${this.shootDelay}ms`);
+        
+        // Show enhanced fire notification
+        const enhancedFireText = this.add.text(
+            this.cameras.main.width / 2,
+            this.cameras.main.height / 2 - 100,
+            'ENHANCED FIRE ACTIVATED!\n2X FIRE RATE',
+            { 
+                fontSize: '28px', 
+                color: '#ff6600',
+                stroke: '#000000', 
+                strokeThickness: 3,
+                align: 'center'
+            }
+        ).setOrigin(0.5).setDepth(1000);
+        
+        // Add pulsing effect
+        this.tweens.add({
+            targets: enhancedFireText,
+            alpha: 0.6,
+            scale: 1.1,
+            duration: 500,
+            ease: 'Sine.easeInOut',
+            yoyo: true,
+            repeat: 3,
+            onComplete: () => {
+                enhancedFireText.destroy();
+            }
+        });
+        
+        // Play power-up sound
+        this.bossExplosionSound.play({ volume: 0.4 });
+    }
+
+    private startStageMusic(stage: number): void {
+        // Stop any currently playing background music
+        if (this.backgroundMusic && this.backgroundMusic.isPlaying) {
+            this.backgroundMusic.stop();
+        }
+        
+        switch (stage) {
+            case 1:
+                if (this.backgroundMusic) {
+                    console.log('Starting Stage 1 background music');
+                    this.backgroundMusic.play();
+                }
+                break;
+            case 2:
+                // Future: Add Stage 2 music here
+                // this.backgroundMusic = this.sound.add('stage2-theme', { volume: 0.4, loop: true });
+                // this.backgroundMusic.play();
+                console.log('Stage 2 - No background music yet');
+                break;
+            default:
+                console.log(`No background music defined for stage ${stage}`);
+                break;
+        }
+    }
+
+    private stopBackgroundMusic(): void {
+        if (this.backgroundMusic && this.backgroundMusic.isPlaying) {
+            this.backgroundMusic.stop();
+            console.log('Background music stopped');
+        }
+    }
+
     preload() {
         // Load stage backgrounds
         this.load.image('background-stage1', 'assets/skyforce_assets/PNG/BG/Blue_Nebula_07-1024x1024.png');
@@ -285,6 +358,9 @@ export class MainScene extends Phaser.Scene {
         this.load.audio('explosion', 'assets/sounds/explosion.wav');
         this.load.audio('boss-explosion', 'assets/sounds/boss-explosion.wav');
         this.load.audio('firecracker-sound', 'assets/sounds/Firecracker_sound.m4a');
+        
+        // Load background music
+        this.load.audio('stage1-theme', 'assets/sounds/stg_theme001.m4a');
 
         // Add load complete callback
         this.load.on('complete', () => {
@@ -748,6 +824,13 @@ this.boss1 = this.physics.add.sprite(500, 500, 'boss1');
         this.bossExplosionSound = this.sound.add('boss-explosion', { volume: 0.3 });
         this.firecrackerSound = this.sound.add('firecracker-sound', { volume: 0.3 });
         this.laserSound = this.shootSound; // Use the shoot sound for laser sound
+        
+        // Initialize and start background music for Stage 1
+        this.backgroundMusic = this.sound.add('stage1-theme', { 
+            volume: 0.4, 
+            loop: true 
+        });
+        this.startStageMusic(this.gameState.currentStage);
 
         // Setup collisions for bosses
         this.physics.add.overlap(this.bullets, this.bossEnemies, (bullet, boss) => {
@@ -1286,6 +1369,11 @@ this.boss1 = this.physics.add.sprite(500, 500, 'boss1');
             }
         });
 
+        // Check for enhanced fire upgrade in Stage 2
+        if (this.gameState.currentStage === 2 && this.gameState.score >= 45000 && !this.enhancedFireActive) {
+            this.activateEnhancedFire();
+        }
+
         // Update score text
         this.scoreText.setText(`Score: ${this.gameState.score}`);
 
@@ -1329,9 +1417,14 @@ this.boss1 = this.physics.add.sprite(500, 500, 'boss1');
 
     private shoot() {
         const currentTime = this.time.now;
-        const shootDelay = this.godModeActive ? this.godModeShootDelay : this.shootDelay;
+        let activeShootDelay = this.shootDelay;
+        
+        // God mode takes priority over enhanced fire
+        if (this.godModeActive) {
+            activeShootDelay = this.godModeShootDelay;
+        }
 
-        if (currentTime - this.lastShootTime < shootDelay) {
+        if (currentTime - this.lastShootTime < activeShootDelay) {
             return;
         }
 
@@ -2510,6 +2603,9 @@ this.boss1 = this.physics.add.sprite(500, 500, 'boss1');
         // Change background for new stage
         this.changeBackground(this.gameState.currentStage);
         
+        // Start music for new stage
+        this.startStageMusic(this.gameState.currentStage);
+        
         this.gameState.health = 100; // Restore full health
         this.gameState.isStageTransition = false;
         this.isPaused = false;
@@ -2959,6 +3055,9 @@ this.boss1 = this.physics.add.sprite(500, 500, 'boss1');
     private gameOver() {
         this.gameState.isGameOver = true;
         
+        // Stop background music
+        this.stopBackgroundMusic();
+        
         // Ensure health is set to 0 and update the display
         this.gameState.health = 0;
         this.healthText.setText(`Health: 0%`);
@@ -2994,8 +3093,16 @@ this.boss1 = this.physics.add.sprite(500, 500, 'boss1');
         
         if (this.gameState.isPaused) {
             this.physics.pause();
+            // Pause background music
+            if (this.backgroundMusic && this.backgroundMusic.isPlaying) {
+                this.backgroundMusic.pause();
+            }
         } else {
             this.physics.resume();
+            // Resume background music
+            if (this.backgroundMusic && this.backgroundMusic.isPaused) {
+                this.backgroundMusic.resume();
+            }
         }
     }
 
@@ -3007,6 +3114,14 @@ this.boss1 = this.physics.add.sprite(500, 500, 'boss1');
         this.gameState.health = 100;
         this.gameState.gameTime = 0;
         this.gameState.gameCompleted = false;
+        this.gameState.currentStage = 1; // Reset to stage 1
+        
+        // Reset enhanced fire
+        this.enhancedFireActive = false;
+        this.shootDelay = this.baseShootDelay;
+        
+        // Restart Stage 1 music
+        this.startStageMusic(1);
         
         this.enemies.clear(true, true);
         this.laserEnemies.clear(true, true);
