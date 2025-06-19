@@ -120,6 +120,7 @@ export class MainScene extends Phaser.Scene {
     private bossExplosionSound!: Phaser.Sound.BaseSound;
     private firecrackerSound!: Phaser.Sound.BaseSound;
     private backgroundMusic!: Phaser.Sound.BaseSound;
+    private currentMusicKey: string = '';
 
     private bossEnemies!: Phaser.Physics.Arcade.Group;
     private enemyProjectiles!: Phaser.Physics.Arcade.Group;
@@ -275,29 +276,43 @@ export class MainScene extends Phaser.Scene {
             this.backgroundMusic.stop();
         }
         
+        // Determine the music key for this stage
+        let musicKey = '';
         switch (stage) {
             case 1:
-                if (this.backgroundMusic) {
-                    console.log('Starting Stage 1 background music');
-                    this.backgroundMusic.play();
-                }
+                musicKey = 'stage1-theme';
                 break;
             case 2:
-                // Future: Add Stage 2 music here
-                // this.backgroundMusic = this.sound.add('stage2-theme', { volume: 0.4, loop: true });
-                // this.backgroundMusic.play();
-                console.log('Stage 2 - No background music yet');
+                musicKey = 'stage2-theme';
+                break;
+            case 3:
+                musicKey = 'stage3-theme';
+                break;
+            case 4:
+                musicKey = 'stage4-theme';
                 break;
             default:
                 console.log(`No background music defined for stage ${stage}`);
-                break;
+                return;
         }
+        
+        // Only create new music object if we're switching to a different track
+        if (this.currentMusicKey !== musicKey) {
+            this.backgroundMusic = this.sound.add(musicKey, { 
+                volume: 0.4, 
+                loop: true 
+            });
+            this.currentMusicKey = musicKey;
+        }
+        
+        console.log(`Starting Stage ${stage} background music: ${musicKey}`);
+        this.backgroundMusic.play();
     }
 
     private stopBackgroundMusic(): void {
         if (this.backgroundMusic && this.backgroundMusic.isPlaying) {
             this.backgroundMusic.stop();
-            console.log('Background music stopped');
+            console.log(`Background music stopped: ${this.currentMusicKey}`);
         }
     }
 
@@ -359,8 +374,11 @@ export class MainScene extends Phaser.Scene {
         this.load.audio('boss-explosion', 'assets/sounds/boss-explosion.wav');
         this.load.audio('firecracker-sound', 'assets/sounds/Firecracker_sound.m4a');
         
-        // Load background music
+        // Load background music for all stages
         this.load.audio('stage1-theme', 'assets/sounds/stg_theme001.m4a');
+        this.load.audio('stage2-theme', 'assets/sounds/stg_theme002.m4a');
+        this.load.audio('stage3-theme', 'assets/sounds/stg_theme003.m4a');
+        this.load.audio('stage4-theme', 'assets/sounds/stg_theme004.m4a');
 
         // Add load complete callback
         this.load.on('complete', () => {
@@ -825,11 +843,7 @@ this.boss1 = this.physics.add.sprite(500, 500, 'boss1');
         this.firecrackerSound = this.sound.add('firecracker-sound', { volume: 0.3 });
         this.laserSound = this.shootSound; // Use the shoot sound for laser sound
         
-        // Initialize and start background music for Stage 1
-        this.backgroundMusic = this.sound.add('stage1-theme', { 
-            volume: 0.4, 
-            loop: true 
-        });
+        // Start background music for Stage 1
         this.startStageMusic(this.gameState.currentStage);
 
         // Setup collisions for bosses
@@ -3120,7 +3134,8 @@ this.boss1 = this.physics.add.sprite(500, 500, 'boss1');
         this.enhancedFireActive = false;
         this.shootDelay = this.baseShootDelay;
         
-        // Restart Stage 1 music
+        // Reset music tracking and restart Stage 1 music
+        this.currentMusicKey = '';
         this.startStageMusic(1);
         
         this.enemies.clear(true, true);
