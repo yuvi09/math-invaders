@@ -103,6 +103,8 @@ export class MainScene extends Phaser.Scene {
     private shootDelay: number = 167; // Reduced from 250 to increase fire rate by 50%
     private baseShootDelay: number = 167; // Store original delay
     private enhancedFireActive: boolean = false;
+    private stage2ShipActive: boolean = false;
+    private stage2FireRateBonus: number = 0.8; // 20% faster (0.8 = 80% of original delay)
     private enemySpawnDelay: number = 2000;
     private laserEnemySpawnDelay: number = 15000;
     private missileEnemySpawnDelay: number = 12000; // Missile enemy every 12 seconds
@@ -234,9 +236,9 @@ export class MainScene extends Phaser.Scene {
 
     private activateEnhancedFire(): void {
         this.enhancedFireActive = true;
-        this.shootDelay = this.baseShootDelay / 2; // Double the fire rate (half the delay)
+        this.updateFireRate(); // Use the centralized fire rate calculation
         
-        console.log(`Enhanced Fire Activated! Fire rate doubled from ${this.baseShootDelay}ms to ${this.shootDelay}ms`);
+        console.log(`Enhanced Fire Activated! New fire rate: ${this.shootDelay}ms`);
         
         // Show enhanced fire notification
         const enhancedFireText = this.add.text(
@@ -316,6 +318,102 @@ export class MainScene extends Phaser.Scene {
         }
     }
 
+    private getPlayerShipKey(stage: number): string {
+        switch (stage) {
+            case 1:
+                return 'player'; // Original ship1.png
+            case 2:
+            case 3:
+            case 4:
+                return 'player-stage2'; // ship3.png for Stage 2+
+            default:
+                return 'player'; // Fallback to original ship
+        }
+    }
+
+    private updatePlayerShip(newStage: number): void {
+        if (!this.player) return;
+        
+        const newShipKey = this.getPlayerShipKey(newStage);
+        const currentPosition = { x: this.player.x, y: this.player.y };
+        const currentScale = this.player.scale;
+        const currentAngle = this.player.angle;
+        const currentTint = this.player.tintTopLeft;
+        
+        console.log(`Upgrading player ship for Stage ${newStage}: ${newShipKey}`);
+        
+        // Update the texture
+        this.player.setTexture(newShipKey);
+        
+        // Maintain position and properties
+        this.player.setPosition(currentPosition.x, currentPosition.y);
+        this.player.setScale(currentScale);
+        this.player.setAngle(currentAngle);
+        
+        // Restore tint if player was damaged
+        if (currentTint !== 0xffffff) {
+            this.player.setTint(currentTint);
+        }
+        
+        // Update body size to match new ship
+        this.player.setBodySize(this.player.displayWidth, this.player.displayHeight, true);
+        
+        // Update fire rate for Stage 2+ ships
+        if (newStage >= 2) {
+            this.stage2ShipActive = true;
+            this.updateFireRate();
+            
+            // Show ship upgrade notification
+            const shipUpgradeText = this.add.text(
+                this.cameras.main.width / 2,
+                this.cameras.main.height / 2 + 50,
+                'SHIP UPGRADED!\n+20% FIRE RATE',
+                { 
+                    fontSize: '24px', 
+                    color: '#00ff88',
+                    stroke: '#000000', 
+                    strokeThickness: 3,
+                    align: 'center'
+                }
+            ).setOrigin(0.5).setDepth(1000);
+            
+            // Add upgrade effect
+            this.tweens.add({
+                targets: shipUpgradeText,
+                alpha: 0,
+                y: shipUpgradeText.y - 50,
+                duration: 2000,
+                ease: 'Power2',
+                onComplete: () => {
+                    shipUpgradeText.destroy();
+                }
+            });
+            
+            // Play upgrade sound
+            this.explosionSound.play({ volume: 0.3 });
+        } else {
+            this.stage2ShipActive = false;
+            this.updateFireRate();
+        }
+    }
+
+    private updateFireRate(): void {
+        let newDelay = this.baseShootDelay;
+        
+        // Apply Stage 2 ship bonus (20% faster)
+        if (this.stage2ShipActive) {
+            newDelay = this.baseShootDelay * this.stage2FireRateBonus;
+        }
+        
+        // Apply enhanced fire bonus (2x faster) - this stacks with Stage 2 bonus
+        if (this.enhancedFireActive) {
+            newDelay = newDelay / 2;
+        }
+        
+        this.shootDelay = newDelay;
+        console.log(`Fire rate updated - Stage 2 Ship: ${this.stage2ShipActive}, Enhanced Fire: ${this.enhancedFireActive}, Delay: ${newDelay}ms`);
+    }
+
     preload() {
         // Load stage backgrounds
         this.load.image('background-stage1', 'assets/skyforce_assets/PNG/BG/Blue_Nebula_07-1024x1024.png');
@@ -327,6 +425,9 @@ export class MainScene extends Phaser.Scene {
         this.load.image('player', 'assets/skyforce_assets/PNG/Ships/ship1.png');
         this.load.image('player-damage1', 'assets/skyforce_assets/PNG/Ships/ship1.png');  // We'll use tint for damage
         this.load.image('player-damage2', 'assets/skyforce_assets/PNG/Ships/ship1.png');  // We'll use tint for damage
+        
+        // Load Stage 2 player ship
+        this.load.image('player-stage2', 'assets/skyforce_assets/PNG/Ships/ship3.png');
         
         // Load enemy ships
         this.load.image('enemy', 'assets/skyforce_assets/PNG/Enemies/enemyRed1.png');
@@ -396,9 +497,9 @@ export class MainScene extends Phaser.Scene {
     }
 
     create() {
-        // Create scrolling background
-        const gameWidth = this.scale.width;
-        const gameHeight = this.scale.height;
+        // Create scrolling background - use camera dimensions for consistency
+        const gameWidth = this.cameras.main.width;
+        const gameHeight = this.cameras.main.height;
         
         // Create background with proper dimensions for infinite scrolling
         // Start with stage 1 background
@@ -409,8 +510,17 @@ export class MainScene extends Phaser.Scene {
         // Set the background to cover the entire screen properly
         this.background.setDisplaySize(gameWidth, gameHeight);
         
-        // Set physics world bounds to match the game size
-        this.physics.world.setBounds(0, 0, gameWidth, gameHeight);
+        // Use normal world width for all devices
+        const worldWidth = gameWidth;
+        
+        // Set physics world bounds to normal size
+        this.physics.world.setBounds(0, 0, worldWidth, gameHeight);
+        
+        // Set camera bounds to match world
+        this.cameras.main.setBounds(0, 0, worldWidth, gameHeight);
+        
+        // Keep camera viewport at original size so UI stays in place
+        this.cameras.main.setViewport(0, 0, gameWidth, gameHeight);
         
         // Handle resize events
         this.scale.on('resize', (gameSize: Phaser.Structs.Size) => {
@@ -421,11 +531,19 @@ export class MainScene extends Phaser.Scene {
             this.background.setSize(width, height);
             this.background.setDisplaySize(width, height);
             
-            // Update camera
-            this.cameras.main.setViewport(0, 0, width, height);
+            // Use normal world width for all devices
+            const worldWidth = width;
             
-            // Update physics world bounds to match new size
-            this.physics.world.setBounds(0, 0, width, height);
+            // Update camera viewport (display area) and world bounds (physics area)
+            this.cameras.main.setViewport(0, 0, width, height);
+            this.cameras.main.setBounds(0, 0, worldWidth, height);
+            
+            // Update physics world bounds to normal size
+            this.physics.world.setBounds(0, 0, worldWidth, height);
+            
+            // Camera stays fixed for all devices
+            this.cameras.main.stopFollow();
+            this.cameras.main.setDeadzone(0, 0);
             
             // Update player bounds and ensure it stays within new bounds
             if (this.player) {
@@ -434,7 +552,7 @@ export class MainScene extends Phaser.Scene {
                 const minY = height * 0.33; // Top 1/3 of screen off limits
                 const maxY = height - playerHalfHeight;
                 const minX = playerHalfWidth;
-                const maxX = width - playerHalfWidth;
+                const maxX = worldWidth - playerHalfWidth; // Use normal world width
                 
                 // Ensure player stays within bounds after resize
                 this.player.x = Phaser.Math.Clamp(this.player.x, minX, maxX);
@@ -467,7 +585,7 @@ export class MainScene extends Phaser.Scene {
         // Set body size to match display size and center it properly
         this.player.setBodySize(this.player.displayWidth, this.player.displayHeight, true);
         
-
+        // Camera stays fixed since world is normal size
 
         // Setup input
         this.cursors = this.input.keyboard!.createCursorKeys();
@@ -481,8 +599,8 @@ export class MainScene extends Phaser.Scene {
         // Add touch/trackpad controls with enhanced movement and strict bounds
         this.input.on('pointermove', (pointer: Phaser.Input.Pointer) => {
             if (pointer.isDown || pointer.x !== pointer.prevPosition.x || pointer.y !== pointer.prevPosition.y) {
-                const gameWidth = this.scale.width;
-                const gameHeight = this.scale.height;
+                const gameWidth = this.cameras.main.width;
+                const gameHeight = this.cameras.main.height;
                 const playerHalfWidth = this.player.displayWidth / 2;
                 const playerHalfHeight = this.player.displayHeight / 2;
                 const minY = gameHeight * 0.33; // Top 1/3 of screen off limits
@@ -522,8 +640,8 @@ export class MainScene extends Phaser.Scene {
 
         // Add pointer down support for tap-to-move with strict bounds
         this.input.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
-            const gameWidth = this.scale.width;
-            const gameHeight = this.scale.height;
+            const gameWidth = this.cameras.main.width;
+            const gameHeight = this.cameras.main.height;
             const playerHalfWidth = this.player.displayWidth / 2;
             const playerHalfHeight = this.player.displayHeight / 2;
             const minY = gameHeight * 0.33;
@@ -1004,9 +1122,9 @@ this.boss1 = this.physics.add.sprite(500, 500, 'boss1');
 
         if (!this.player || !this.cursors) return;
 
-        // Get current viewport dimensions
-        const gameWidth = this.scale.width;
-        const gameHeight = this.scale.height;
+        // Get current viewport dimensions - use camera dimensions for consistency
+        const gameWidth = this.cameras.main.width;
+        const gameHeight = this.cameras.main.height;
 
         // Handle keyboard movement
         const keyboardActive = this.cursors.left.isDown || this.cursors.right.isDown || 
@@ -1064,9 +1182,8 @@ this.boss1 = this.physics.add.sprite(500, 500, 'boss1');
         const minY = gameHeight * 0.33;
         const maxY = gameHeight - playerHalfHeight;
         const minX = playerHalfWidth;
-        const maxX = gameWidth - playerHalfWidth;
         
-
+        const maxX = gameWidth - playerHalfWidth;
         
         // Force clamp player position every frame - ALWAYS enforce bounds
         this.player.x = Phaser.Math.Clamp(this.player.x, minX, maxX);
@@ -1500,7 +1617,7 @@ this.boss1 = this.physics.add.sprite(500, 500, 'boss1');
     }
 
     private spawnEnemy() {
-        const gameWidth = this.scale.width;
+        const gameWidth = this.cameras.main.width;
         const x = Phaser.Math.Between(50, gameWidth - 50);
         
         // Spawn 3 enemies in a line with wave movement
@@ -1528,7 +1645,7 @@ this.boss1 = this.physics.add.sprite(500, 500, 'boss1');
                     callback: () => {
                         if (enemy.active) {
                             const newX = startX + Math.sin(enemy.y * frequency) * amplitude;
-                            // Clamp to viewport bounds
+                            // Clamp to normal world bounds
                             const enemyHalfWidth = enemy.displayWidth / 2;
                             enemy.x = Phaser.Math.Clamp(newX, enemyHalfWidth, gameWidth - enemyHalfWidth);
                         }
@@ -1542,7 +1659,7 @@ this.boss1 = this.physics.add.sprite(500, 500, 'boss1');
         // Limit to 2 at a time
         if (this.laserEnemies.countActive() >= 2) return;
 
-        const gameWidth = this.scale.width;
+        const gameWidth = this.cameras.main.width;
         const x = Phaser.Math.Between(100, gameWidth - 100);
         const enemy = this.laserEnemies.create(x, -100, 'laser-enemy') as Phaser.Physics.Arcade.Sprite;
         
@@ -1578,7 +1695,7 @@ this.boss1 = this.physics.add.sprite(500, 500, 'boss1');
         // Limit to 2 at a time
         if (this.missileEnemies.countActive() >= 2) return;
 
-        const gameWidth = this.scale.width;
+        const gameWidth = this.cameras.main.width;
         const x = Phaser.Math.Between(100, gameWidth - 100);
         const enemy = this.missileEnemies.create(x, -100, 'missile-enemy') as Phaser.Physics.Arcade.Sprite;
         
@@ -1614,7 +1731,7 @@ this.boss1 = this.physics.add.sprite(500, 500, 'boss1');
         // Limit to 2 at a time
         if (this.nukerEnemies.countActive() >= 2) return;
 
-        const gameWidth = this.scale.width;
+        const gameWidth = this.cameras.main.width;
         const x = Phaser.Math.Between(100, gameWidth - 100);
         const enemy = this.nukerEnemies.create(x, -100, 'nuker-enemy') as Phaser.Physics.Arcade.Sprite;
         
@@ -1650,7 +1767,7 @@ this.boss1 = this.physics.add.sprite(500, 500, 'boss1');
         // Limit to 2 at a time
         if (this.walkerEnemies.countActive() >= 2) return;
 
-        const gameWidth = this.scale.width;
+        const gameWidth = this.cameras.main.width;
         const positions = [
             { x: Phaser.Math.Between(100, gameWidth - 100), y: -100 }
         ];
@@ -1689,7 +1806,7 @@ this.boss1 = this.physics.add.sprite(500, 500, 'boss1');
     }
 
     private spawnEliteEnemy() {
-        const gameWidth = this.scale.width;
+        const gameWidth = this.cameras.main.width;
         const x = Phaser.Math.Between(100, gameWidth - 100);
         const enemy = this.eliteEnemies.create(x, -50, 'elite-enemy') as Phaser.Physics.Arcade.Sprite;
         
@@ -1755,7 +1872,7 @@ this.boss1 = this.physics.add.sprite(500, 500, 'boss1');
     }
 
     private spawnEnemyWave(): void {
-        const gameWidth = this.scale.width;
+        const gameWidth = this.cameras.main.width;
         const numEnemies = 5;
         const spacing = 100;
         const startY = -50;
@@ -1814,7 +1931,7 @@ this.boss1 = this.physics.add.sprite(500, 500, 'boss1');
     }
 
     private spawnNukerPair(): void {
-        const gameWidth = this.scale.width;
+        const gameWidth = this.cameras.main.width;
         // Spawn two nukers on opposite sides
         const leftNuker = this.nukerEnemies.create(100, -100, 'nuker-enemy') as Phaser.Physics.Arcade.Sprite;
         const rightNuker = this.nukerEnemies.create(
@@ -1892,8 +2009,12 @@ this.boss1 = this.physics.add.sprite(500, 500, 'boss1');
         this.gameState.bossFight = true;
         this.bossHealth = 300; // Increased from 200 to 300
 
+        // Use camera dimensions for consistent positioning with player bounds
+        const gameWidth = this.cameras.main.width;
+        const gameHeight = this.cameras.main.height;
+
         const boss = this.bossEnemies.create(
-            this.game.config.width as number / 2,
+            gameWidth / 2, // Center horizontally
             -50,
             'firecracker-boss'
         ) as Phaser.Physics.Arcade.Sprite;
@@ -1902,6 +2023,7 @@ this.boss1 = this.physics.add.sprite(500, 500, 'boss1');
             boss.setScale(0.4);
             boss.setAngle(180);
             boss.setData('health', this.bossHealth);
+            
             
             // Create boss health bar
             this.bossHealthBar = this.add.graphics();
@@ -1912,22 +2034,32 @@ this.boss1 = this.physics.add.sprite(500, 500, 'boss1');
             
             this.updateBossHealthBar();
 
-            // Boss entry animation
+            // Boss entry animation to center of screen
             this.tweens.add({
                 targets: boss,
-                y: 100,
+                x: gameWidth / 2, // Maintain center position
+                y: gameHeight / 2 - 50, // Center vertically (slightly above center)
                 duration: 2000,
                 ease: 'Power2',
                 onComplete: () => {
-                    // Add left-right hovering movement after entry animation completes
+                    // Add subtle hovering effect in center
                     this.tweens.add({
                         targets: boss,
-                        x: this.game.config.width as number - 100, // Move to right side with margin
+                        y: (gameHeight / 2 - 50) + 15, // Small vertical movement
+                        duration: 2000,
+                        ease: 'Sine.easeInOut',
+                        yoyo: true, // Move back to center
+                        repeat: -1 // Loop forever
+                    });
+                    
+                    // Add very subtle horizontal drift
+                    this.tweens.add({
+                        targets: boss,
+                        x: (gameWidth / 2) + 20, // Small horizontal drift
                         duration: 3000,
                         ease: 'Sine.easeInOut',
-                        yoyo: true, // Move back to start
-                        repeat: -1, // Loop forever
-                        repeatDelay: 500 // Pause at each end
+                        yoyo: true,
+                        repeat: -1
                     });
                 }
             });
@@ -2118,8 +2250,11 @@ this.boss1 = this.physics.add.sprite(500, 500, 'boss1');
         this.gameState.bossFight = true;
         this.bossHealth = 400; // Higher health than firecracker boss (300)
 
+        // Use camera dimensions for consistent positioning with player bounds
+        const gameWidth = this.cameras.main.width;
+
         const boss = this.bossEnemies.create(
-            this.game.config.width as number / 2,
+            gameWidth / 2, // Center horizontally using camera width
             -50,
             'tentacle-boss'
         ) as Phaser.Physics.Arcade.Sprite;
@@ -2616,6 +2751,9 @@ this.boss1 = this.physics.add.sprite(500, 500, 'boss1');
         
         // Change background for new stage
         this.changeBackground(this.gameState.currentStage);
+        
+        // Upgrade player ship for new stage
+        this.updatePlayerShip(this.gameState.currentStage);
         
         // Start music for new stage
         this.startStageMusic(this.gameState.currentStage);
@@ -3130,9 +3268,15 @@ this.boss1 = this.physics.add.sprite(500, 500, 'boss1');
         this.gameState.gameCompleted = false;
         this.gameState.currentStage = 1; // Reset to stage 1
         
-        // Reset enhanced fire
+        // Reset ship and fire rate systems
         this.enhancedFireActive = false;
-        this.shootDelay = this.baseShootDelay;
+        this.stage2ShipActive = false;
+        this.updateFireRate(); // Reset to base fire rate
+        
+        // Reset player ship to Stage 1 ship
+        if (this.player) {
+            this.player.setTexture('player');
+        }
         
         // Reset music tracking and restart Stage 1 music
         this.currentMusicKey = '';
