@@ -138,6 +138,10 @@ export class MainScene extends Phaser.Scene {
 
     private eliteEnemies!: Phaser.Physics.Arcade.Group;
     private eliteEnemySpawnDelay: number = 15000; // 15 seconds initially
+    
+    private geckoLanternEnemies!: Phaser.Physics.Arcade.Group;
+    private lastGeckoLanternSpawnTime: number = 0;
+    private geckoLanternSpawnDelay: number = 18000; // 18 seconds initially
 
     private checkpointQuestions: Question[] = [];
     private currentCheckpointQuestionIndex: number = 0;
@@ -438,6 +442,9 @@ export class MainScene extends Phaser.Scene {
         
         // Load elite enemy
         this.load.image('elite-enemy', 'assets/skyforce_assets/PNG/Enemies/nicey_not.png');
+        
+        // Load gecko lantern enemy (Stage 2 exclusive)
+        this.load.image('gecko-lantern', 'assets/skyforce_assets/PNG/Ships/gecko_lantern.png');
         
         // Load boss ships
         this.load.image('boss1', 'assets/skyforce_assets/PNG/Ships/boss1.png');
@@ -792,6 +799,11 @@ export class MainScene extends Phaser.Scene {
             runChildUpdate: true
         });
 
+        this.geckoLanternEnemies = this.physics.add.group({
+            classType: Phaser.Physics.Arcade.Sprite,
+            runChildUpdate: true
+        });
+
         // Add collisions
         this.physics.add.overlap(
             this.bullets,
@@ -1063,6 +1075,32 @@ this.boss1 = this.physics.add.sprite(500, 500, 'boss1');
             this
         );
 
+        // Add collisions for gecko lantern enemies
+        this.physics.add.overlap(
+            this.bullets,
+            this.geckoLanternEnemies,
+            (bullet: Phaser.GameObjects.GameObject | Phaser.Physics.Arcade.Body | Phaser.Physics.Arcade.StaticBody | Phaser.Tilemaps.Tile,
+             enemy: Phaser.GameObjects.GameObject | Phaser.Physics.Arcade.Body | Phaser.Physics.Arcade.StaticBody | Phaser.Tilemaps.Tile) => {
+                if (bullet instanceof Phaser.Physics.Arcade.Image && 
+                    enemy instanceof Phaser.Physics.Arcade.Sprite) {
+                    this.handleBulletGeckoLanternCollision(bullet, enemy);
+                }
+            },
+            undefined,
+            this
+        );
+
+        // Add player-gecko lantern enemy collision
+        this.physics.add.overlap(
+            this.player,
+            this.geckoLanternEnemies,
+            () => {
+                this.gameOver();
+            },
+            undefined,
+            this
+        );
+
         this.setupCheckpointQuestions().catch(error => {
             console.error('Failed to setup checkpoint questions:', error);
         });
@@ -1228,8 +1266,8 @@ this.boss1 = this.physics.add.sprite(500, 500, 'boss1');
                 this.bossExplosionSound.play({ volume: 0.3 });
             }
             
-            // Check for firecracker boss spawn conditions - Stage 1 Boss at 20,000 points
-            if (this.gameState.score >= 20000 && this.gameState.currentStage === 1 && !this.gameState.bossFight && !this.gameState.gameCompleted) {
+            // Check for firecracker boss spawn conditions - Stage 1 Boss at 6,000 points
+            if (this.gameState.score >= 6000 && this.gameState.currentStage === 1 && !this.gameState.bossFight && !this.gameState.gameCompleted) {
                 // Clear all existing enemies before spawning boss
                 this.enemies.clear(true, true);
                 this.laserEnemies.clear(true, true);
@@ -1243,8 +1281,8 @@ this.boss1 = this.physics.add.sprite(500, 500, 'boss1');
                 this.spawnFirecrackerBoss();
             }
 
-            // Check for tentacle boss spawn conditions - Stage 2 Boss at 60,000 points
-            if (this.gameState.score >= 60000 && this.gameState.currentStage === 2 && !this.gameState.bossFight && !this.gameState.gameCompleted) {
+            // Check for tentacle boss spawn conditions - Stage 2 Boss at 20,000 points
+            if (this.gameState.score >= 20000 && this.gameState.currentStage === 2 && !this.gameState.bossFight && !this.gameState.gameCompleted) {
                 console.log('Spawning Tentacle Boss - Score:', this.gameState.score, 'Stage:', this.gameState.currentStage);
                 
                 // Clear all existing enemies before spawning boss
@@ -1261,7 +1299,7 @@ this.boss1 = this.physics.add.sprite(500, 500, 'boss1');
             }
             
             // Debug logging for boss spawn conditions
-            if (this.gameState.score >= 55000 && this.gameState.score <= 65000) {
+            if (this.gameState.score >= 15000 && this.gameState.score <= 25000) {
                 // Only log occasionally to avoid spam
                 if (Math.floor(this.gameState.gameTime / 1000) % 5 === 0 && this.gameState.gameTime % 1000 < 50) {
                     console.log('Boss spawn check - Score:', this.gameState.score, 'Stage:', this.gameState.currentStage, 'Boss Fight:', this.gameState.bossFight, 'Game Completed:', this.gameState.gameCompleted);
@@ -1274,6 +1312,15 @@ this.boss1 = this.physics.add.sprite(500, 500, 'boss1');
                 if (time > this.gameState.lastEliteEnemyTime + eliteSpawnRate) {
                     this.spawnEliteEnemy();
                     this.gameState.lastEliteEnemyTime = time;
+                }
+            }
+
+            // Check for gecko lantern enemy spawn (Stage 2 only)
+            if (this.gameState.currentStage >= 2 && this.gameState.score >= 3000 && !this.gameState.bossFight) {
+                const geckoSpawnRate = Math.max(12000, this.geckoLanternSpawnDelay - Math.floor(timeMinutes) * 600);
+                if (time > this.lastGeckoLanternSpawnTime + geckoSpawnRate) {
+                    this.spawnGeckoLanternEnemy();
+                    this.lastGeckoLanternSpawnTime = time;
                 }
             }
 
@@ -1459,6 +1506,20 @@ this.boss1 = this.physics.add.sprite(500, 500, 'boss1');
             }
         });
 
+        // Clean up gecko lantern enemies with bounds checking
+        this.geckoLanternEnemies.getChildren().forEach((enemy) => {
+            if (enemy instanceof Phaser.Physics.Arcade.Sprite) {
+                // Enforce bounds for gecko lantern enemies
+                const enemyHalfWidth = enemy.displayWidth / 2;
+                enemy.x = Phaser.Math.Clamp(enemy.x, enemyHalfWidth, gameWidth - enemyHalfWidth);
+                
+                // Destroy if enemy goes too far off screen
+                if (enemy.y > gameHeight + 100) {
+                    enemy.destroy();
+                }
+            }
+        });
+
         // Clean up enemy lasers and missiles
         this.enemyLasers.getChildren().forEach((laser) => {
             if (laser instanceof Phaser.Physics.Arcade.Image && laser.y > gameHeight + 50) {
@@ -1501,7 +1562,7 @@ this.boss1 = this.physics.add.sprite(500, 500, 'boss1');
         });
 
         // Check for enhanced fire upgrade in Stage 2
-        if (this.gameState.currentStage === 2 && this.gameState.score >= 45000 && !this.enhancedFireActive) {
+        if (this.gameState.currentStage === 2 && this.gameState.score >= 15000 && !this.enhancedFireActive) {
             this.activateEnhancedFire();
         }
 
@@ -1871,6 +1932,100 @@ this.boss1 = this.physics.add.sprite(500, 500, 'boss1');
         }
     }
 
+    private spawnGeckoLanternEnemy() {
+        // Limit to 1 at a time to make it special
+        if (this.geckoLanternEnemies.countActive() >= 1) return;
+
+        const gameWidth = this.cameras.main.width;
+        const x = Phaser.Math.Between(100, gameWidth - 100);
+        const enemy = this.geckoLanternEnemies.create(x, -50, 'gecko-lantern') as Phaser.Physics.Arcade.Sprite;
+        
+        if (enemy) {
+            enemy.setScale(0.6); // Slightly smaller than elite enemies
+            enemy.setAngle(180); // Rotate to face player's ship
+            
+            // Set high health (tougher than elite enemies)
+            enemy.setData('health', 15);
+            enemy.setData('maxHealth', 15);
+            
+            // Initial downward movement
+            enemy.setVelocityY(80);
+            
+            // Make gecko lantern hover and perform special behavior
+            this.time.delayedCall(1500, () => {
+                if (enemy.active) {
+                    // Stop at a position above the player
+                    enemy.setVelocityY(0);
+                    
+                    // Add glowing/pulsing effect
+                    this.tweens.add({
+                        targets: enemy,
+                        alpha: 0.7,
+                        duration: 800,
+                        ease: 'Sine.easeInOut',
+                        yoyo: true,
+                        repeat: -1
+                    });
+                    
+                    // Add hovering effect
+                    this.tweens.add({
+                        targets: enemy,
+                        y: enemy.y + 25,
+                        duration: 2000,
+                        ease: 'Sine.easeInOut',
+                        yoyo: true,
+                        repeat: -1
+                    });
+                    
+                    // Circular movement pattern within bounds
+                    const centerX = enemy.x;
+                    const centerY = enemy.y;
+                    let angle = 0;
+                    
+                    const circularMovement = this.time.addEvent({
+                        delay: 100,
+                        callback: () => {
+                            if (enemy.active) {
+                                angle += 0.05;
+                                const radius = 40;
+                                const newX = centerX + Math.cos(angle) * radius;
+                                const newY = centerY + Math.sin(angle) * radius * 0.5; // Elliptical
+                                
+                                // Clamp to bounds
+                                const enemyHalfWidth = enemy.displayWidth / 2;
+                                enemy.x = Phaser.Math.Clamp(newX, enemyHalfWidth, gameWidth - enemyHalfWidth);
+                                enemy.y = Math.max(50, newY);
+                            }
+                        },
+                        loop: true
+                    });
+                    
+                    // Start special attack pattern
+                    this.startGeckoLanternAttack(enemy);
+                    
+                    // Clean up movement when enemy is destroyed
+                    enemy.once('destroy', () => {
+                        if (circularMovement) {
+                            circularMovement.destroy();
+                        }
+                    });
+                    
+                    // Leave after some time if not destroyed
+                    this.time.delayedCall(12000, () => {
+                        if (enemy.active) {
+                            // Stop all effects and leave
+                            this.tweens.killTweensOf(enemy);
+                            if (circularMovement) {
+                                circularMovement.destroy();
+                            }
+                            enemy.setVelocityY(100);
+                        }
+                    });
+                }
+            });
+        }
+    }
+
     private spawnEnemyWave(): void {
         const gameWidth = this.cameras.main.width;
         const numEnemies = 5;
@@ -2014,7 +2169,7 @@ this.boss1 = this.physics.add.sprite(500, 500, 'boss1');
         const gameHeight = this.cameras.main.height;
 
         const boss = this.bossEnemies.create(
-            gameWidth / 2, // Center horizontally
+            gameWidth / 4, // Left-center horizontally (25% from left edge)
             -50,
             'firecracker-boss'
         ) as Phaser.Physics.Arcade.Sprite;
@@ -2034,15 +2189,15 @@ this.boss1 = this.physics.add.sprite(500, 500, 'boss1');
             
             this.updateBossHealthBar();
 
-            // Boss entry animation to center of screen
+            // Boss entry animation to left-center of screen
             this.tweens.add({
                 targets: boss,
-                x: gameWidth / 2, // Maintain center position
+                x: gameWidth / 4, // Left-center position (25% from left edge)
                 y: gameHeight / 2 - 50, // Center vertically (slightly above center)
                 duration: 2000,
                 ease: 'Power2',
                 onComplete: () => {
-                    // Add subtle hovering effect in center
+                    // Add subtle hovering effect in left-center
                     this.tweens.add({
                         targets: boss,
                         y: (gameHeight / 2 - 50) + 15, // Small vertical movement
@@ -2052,10 +2207,10 @@ this.boss1 = this.physics.add.sprite(500, 500, 'boss1');
                         repeat: -1 // Loop forever
                     });
                     
-                    // Add very subtle horizontal drift
+                    // Add horizontal drift within left side area
                     this.tweens.add({
                         targets: boss,
-                        x: (gameWidth / 2) + 20, // Small horizontal drift
+                        x: (gameWidth / 4) + 30, // Drift between 25% and ~30% of screen width
                         duration: 3000,
                         ease: 'Sine.easeInOut',
                         yoyo: true,
@@ -2069,10 +2224,12 @@ this.boss1 = this.physics.add.sprite(500, 500, 'boss1');
                 delay: 500,
                 callback: () => {
                     if (boss.active && Math.random() < 0.1) { // 10% chance per check
-                        // Evasive movement
+                        // Evasive movement within left side area
                         const randomY = Phaser.Math.Between(80, 150);
+                        const randomX = Phaser.Math.Between(gameWidth / 6, gameWidth / 3); // Stay in left third
                         this.tweens.add({
                             targets: boss,
+                            x: randomX,
                             y: randomY,
                             duration: 1000,
                             ease: 'Sine.easeInOut'
@@ -2297,7 +2454,7 @@ this.boss1 = this.physics.add.sprite(500, 500, 'boss1');
 
             // Rapid fire attack pattern - gradually escalating assault
             const rapidFireTimer = this.time.addEvent({
-                delay: 1000, // Start slower - 1 second intervals
+                delay: 2000, // Start slower - 2 second intervals (reduced fire rate by 50%)
                 callback: () => {
                     // Robust boss checking - ensure boss exists and fight is active
                     const activeBosses = this.bossEnemies.getChildren().filter(b => b.active);
@@ -2385,7 +2542,7 @@ this.boss1 = this.physics.add.sprite(500, 500, 'boss1');
             
             // Secondary attack - escalating missile barrage
             const missileTimer = this.time.addEvent({
-                delay: 4000, // Start with 4 second intervals
+                delay: 8000, // Start with 8 second intervals (reduced fire rate by 50%)
                 callback: () => {
                     const activeBosses = this.bossEnemies.getChildren().filter(b => b.active);
                     if (activeBosses.length > 0 && this.gameState.bossFight && this.player.active) {
@@ -2480,7 +2637,7 @@ this.boss1 = this.physics.add.sprite(500, 500, 'boss1');
             
             // Third attack pattern - bombs only appear in advanced phases
             const bombTimer = this.time.addEvent({
-                delay: 6000, // Every 6 seconds initially
+                delay: 12000, // Every 12 seconds initially (reduced fire rate by 50%)
                 callback: () => {
                     const activeBosses = this.bossEnemies.getChildren().filter(b => b.active);
                     if (activeBosses.length > 0 && this.gameState.bossFight) {
@@ -2773,6 +2930,7 @@ this.boss1 = this.physics.add.sprite(500, 500, 'boss1');
         this.enemyMissiles.clear(true, true);
         this.enemyDebris.clear(true, true);
         this.enemyProjectiles.clear(true, true);
+        this.geckoLanternEnemies.clear(true, true);
         
         // Reset wave direction
         this.waveDirection = 'left';
@@ -2961,7 +3119,8 @@ this.boss1 = this.physics.add.sprite(500, 500, 'boss1');
             ...this.missileEnemies.getChildren(),
             ...this.nukerEnemies.getChildren(),
             ...this.walkerEnemies.getChildren(),
-            ...this.bossEnemies.getChildren()
+            ...this.bossEnemies.getChildren(),
+            ...this.geckoLanternEnemies.getChildren()
         ];
         
         if (allEnemies.length === 0) return null;
@@ -3290,6 +3449,7 @@ this.boss1 = this.physics.add.sprite(500, 500, 'boss1');
         this.enemyDebris.clear(true, true);
         this.walkerEnemies.clear(true, true);
         this.enemyProjectiles.clear(true, true);
+        this.geckoLanternEnemies.clear(true, true);
         
         // Reset checkpoint counters
         this.currentCheckpointQuestionIndex = 0;
@@ -3472,6 +3632,156 @@ this.boss1 = this.physics.add.sprite(500, 500, 'boss1');
             // Random chance for power-up
             if (Math.random() < 0.2) { // 20% chance
                 this.gameState.firepower = Math.min(this.gameState.firepower + 1, 3);
+            }
+            
+            // Destroy enemy
+            enemy.destroy();
+        }
+    }
+
+    private startGeckoLanternAttack(enemy: Phaser.Physics.Arcade.Sprite) {
+        // Unique attack pattern - energy orbs that spiral outward
+        const attackEvent = this.time.addEvent({
+            delay: 1500, // Attack every 1.5 seconds
+            callback: () => {
+                if (enemy.active) {
+                    // Create 4 energy orbs in a spiral pattern
+                    for (let i = 0; i < 4; i++) {
+                        const orb = this.enemyLasers.create(
+                            enemy.x,
+                            enemy.y + 10,
+                            'enemy-laser'
+                        ) as Phaser.Physics.Arcade.Image;
+                        
+                        if (orb) {
+                            orb.setScale(0.7);
+                            orb.setTint(0x00ff88); // Green tint for gecko lantern orbs
+                            
+                            // Spiral outward pattern
+                            const baseAngle = (i * Math.PI * 2) / 4; // 90 degrees apart
+                            const speed = 180;
+                            
+                            // Initial velocity
+                            orb.setVelocity(
+                                Math.cos(baseAngle) * speed * 0.5,
+                                Math.sin(baseAngle) * speed * 0.5 + speed * 0.7 // Mostly downward
+                            );
+                            
+                            // Add spiral effect over time
+                            let spiralAngle = baseAngle;
+                            const spiralTimer = this.time.addEvent({
+                                delay: 50,
+                                callback: () => {
+                                    if (orb.active) {
+                                        spiralAngle += 0.2;
+                                        const currentSpeed = 200;
+                                        orb.setVelocity(
+                                            Math.cos(spiralAngle) * currentSpeed * 0.6,
+                                            Math.sin(spiralAngle) * currentSpeed * 0.4 + currentSpeed * 0.6
+                                        );
+                                    } else {
+                                        spiralTimer.destroy();
+                                    }
+                                },
+                                repeat: 15 // Spiral for about 750ms
+                            });
+                            
+                            orb.once('destroy', () => {
+                                if (spiralTimer) {
+                                    spiralTimer.destroy();
+                                }
+                            });
+                        }
+                    }
+                    
+                    // Play attack sound with unique pitch
+                    this.laserSound.play({ volume: 0.4, detune: 400 });
+                } else {
+                    // Stop attacking if enemy destroyed
+                    attackEvent.destroy();
+                }
+            },
+            loop: true
+        });
+        
+        // Stop attacking when enemy leaves or is destroyed
+        enemy.once('destroy', () => {
+            attackEvent.destroy();
+        });
+    }
+
+    private handleBulletGeckoLanternCollision(bullet: Phaser.Physics.Arcade.Image, enemy: Phaser.Physics.Arcade.Sprite) {
+        bullet.destroy();
+        
+        // Get current health and reduce it
+        const health = (enemy.getData('health') || 0) - 1;
+        enemy.setData('health', health);
+        
+        // Flash enemy with green tint
+        enemy.setTint(0x00ff88);
+        this.time.delayedCall(100, () => {
+            if (enemy.active) {
+                enemy.clearTint();
+            }
+        });
+        
+        // Check if enemy is destroyed
+        if (health <= 0) {
+            // Create special explosion effect
+            this.createExplosion(enemy.x, enemy.y, 1.5);
+            
+            // Create additional green particle effects
+            for (let i = 0; i < 6; i++) {
+                const particle = this.add.sprite(enemy.x, enemy.y, 'fire00');
+                particle.setScale(0.4);
+                particle.setTint(0x00ff88);
+                particle.setAlpha(0.8);
+                
+                const angle = (i * Math.PI * 2) / 6;
+                this.tweens.add({
+                    targets: particle,
+                    x: particle.x + Math.cos(angle) * 60,
+                    y: particle.y + Math.sin(angle) * 60,
+                    alpha: 0,
+                    duration: 800,
+                    onComplete: () => {
+                        particle.destroy();
+                    }
+                });
+            }
+            
+            // Play explosion sound
+            this.explosionSound.play();
+            
+            // Add high score (worth more than elite enemies)
+            this.updateScore(750);
+            
+            // 70% chance for health power-up (high reward)
+            if (Math.random() < 0.7) {
+                this.spawnHealthPowerUp(enemy.x, enemy.y);
+            }
+            
+            // 30% chance for firepower increase
+            if (Math.random() < 0.3) {
+                this.gameState.firepower = Math.min(this.gameState.firepower + 1, 3);
+                
+                // Show firepower increase notification
+                const powerText = this.add.text(
+                    enemy.x,
+                    enemy.y - 40,
+                    'FIREPOWER UP!',
+                    { fontSize: '16px', color: '#ffff00' }
+                ).setOrigin(0.5);
+                
+                this.tweens.add({
+                    targets: powerText,
+                    y: powerText.y - 50,
+                    alpha: 0,
+                    duration: 1500,
+                    onComplete: () => {
+                        powerText.destroy();
+                    }
+                });
             }
             
             // Destroy enemy
