@@ -32,6 +32,7 @@ enum EnemyType {
     MISSILE = 'missile',
     NUKER = 'nuker',
     WALKER = 'walker',
+    ELEKTRODE = 'elektrode',
     // Future enemy types
     BOMBER = 'bomber',
     STEALTH = 'stealth',
@@ -142,6 +143,13 @@ export class MainScene extends Phaser.Scene {
     private geckoLanternEnemies!: Phaser.Physics.Arcade.Group;
     private lastGeckoLanternSpawnTime: number = 0;
     private geckoLanternSpawnDelay: number = 18000; // 18 seconds initially
+    
+    private escortFighters!: Phaser.Physics.Arcade.Group;
+    private kingLanternBoss!: Phaser.Physics.Arcade.Group;
+    
+    private elektrodeEnemies!: Phaser.Physics.Arcade.Group;
+    private lastElektrodeSpawnTime: number = 0;
+    private elektrodeSpawnDelay: number = 12000; // 12 seconds initially
 
     private checkpointQuestions: Question[] = [];
     private currentCheckpointQuestionIndex: number = 0;
@@ -202,9 +210,10 @@ export class MainScene extends Phaser.Scene {
                 return 'background-stage1'; // Blue_Nebula_07
             case 2:
                 return 'background-stage2'; // Blue_Nebula_06
+            case 3:
+                return 'background-stage3'; // Green_Nebula_05
             default:
                 // For future stages, add more cases here
-                // case 3: return 'background-stage3';
                 // case 4: return 'background-stage4';
                 return 'background-stage1'; // Fallback to stage 1 background
         }
@@ -422,8 +431,9 @@ export class MainScene extends Phaser.Scene {
         // Load stage backgrounds
         this.load.image('background-stage1', 'assets/skyforce_assets/PNG/BG/Blue_Nebula_07-1024x1024.png');
         this.load.image('background-stage2', 'assets/skyforce_assets/PNG/BG/Blue_Nebula_06-1024x1024.png');
+        this.load.image('background-stage3', 'assets/skyforce_assets/PNG/BG/Green_Nebula_05-1024x1024.png');
         // Future stage backgrounds can be added here
-        // this.load.image('background-stage3', 'assets/skyforce_assets/PNG/BG/[future-background].png');
+        // this.load.image('background-stage4', 'assets/skyforce_assets/PNG/BG/[future-background].png');
         
         // Load player ships
         this.load.image('player', 'assets/skyforce_assets/PNG/Ships/ship1.png');
@@ -443,13 +453,33 @@ export class MainScene extends Phaser.Scene {
         // Load elite enemy
         this.load.image('elite-enemy', 'assets/skyforce_assets/PNG/Enemies/nicey_not.png');
         
-        // Load gecko lantern enemy (Stage 2 exclusive)
+        // Load gecko lantern enemy (Stage 3 exclusive)
         this.load.image('gecko-lantern', 'assets/skyforce_assets/PNG/Ships/gecko_lantern.png');
+        
+        // Load Elektrode enemy (Stage 3)
+        this.load.image('elektrode-enemy', 'assets/skyforce_assets/PNG/Enemies/enemyGreen4.png');
         
         // Load boss ships
         this.load.image('boss1', 'assets/skyforce_assets/PNG/Ships/boss1.png');
         this.load.image('firecracker-boss', 'assets/skyforce_assets/PNG/Ships/firecracker_ship.png');
         this.load.image('tentacle-boss', 'assets/skyforce_assets/PNG/Enemies/enemyTentacle.png');
+        
+        // Load Stage 3 boss and escorts
+        this.load.image('king-lantern', 'assets/skyforce_assets/PNG/Ships/king_lantern.png');
+        this.load.image('glow-stones', 'assets/skyforce_assets/PNG/Ships/glow_stones.png');
+        
+        // Load Stage 3 specific weapons
+        this.load.image('escort-cannon', 'assets/skyforce_assets/PNG/Lasers/laserGreen14.png');
+        this.load.image('king-fireball', 'assets/skyforce_assets/PNG/Lasers/laserGreen16.png');
+        
+        // Load King Lantern swirling weapons
+        this.load.image('swirl-weapon-1', 'assets/skyforce_assets/PNG/Lasers/laserGreen01.png');
+        this.load.image('swirl-weapon-2', 'assets/skyforce_assets/PNG/Lasers/laserGreen02.png');
+        this.load.image('swirl-weapon-3', 'assets/skyforce_assets/PNG/Lasers/laserGreen13.png');
+        
+        // Load lightning bolt assets for Elektrode attacks
+        this.load.image('lightning-bolt-1', 'assets/skyforce_assets/PNG/Lasers/laserGreen10.png');
+        this.load.image('lightning-bolt-2', 'assets/skyforce_assets/PNG/Lasers/laserGreen11.png');
         
         // Load projectiles
         this.load.image('bullet', 'assets/skyforce_assets/PNG/Lasers/laserBlue01.png');
@@ -804,6 +834,21 @@ export class MainScene extends Phaser.Scene {
             runChildUpdate: true
         });
 
+        this.escortFighters = this.physics.add.group({
+            classType: Phaser.Physics.Arcade.Sprite,
+            runChildUpdate: true
+        });
+
+        this.kingLanternBoss = this.physics.add.group({
+            classType: Phaser.Physics.Arcade.Sprite,
+            runChildUpdate: true
+        });
+
+        this.elektrodeEnemies = this.physics.add.group({
+            classType: Phaser.Physics.Arcade.Sprite,
+            runChildUpdate: true
+        });
+
         // Add collisions
         this.physics.add.overlap(
             this.bullets,
@@ -1101,6 +1146,87 @@ this.boss1 = this.physics.add.sprite(500, 500, 'boss1');
             this
         );
 
+        // Add collisions for escort fighters
+        this.physics.add.overlap(
+            this.bullets,
+            this.escortFighters,
+            (bullet: Phaser.GameObjects.GameObject | Phaser.Physics.Arcade.Body | Phaser.Physics.Arcade.StaticBody | Phaser.Tilemaps.Tile,
+             escort: Phaser.GameObjects.GameObject | Phaser.Physics.Arcade.Body | Phaser.Physics.Arcade.StaticBody | Phaser.Tilemaps.Tile) => {
+                if (bullet instanceof Phaser.Physics.Arcade.Image && 
+                    escort instanceof Phaser.Physics.Arcade.Sprite) {
+                    this.handleBulletEscortCollision(bullet, escort);
+                }
+            },
+            undefined,
+            this
+        );
+
+        // Add player-escort fighter collision
+        this.physics.add.overlap(
+            this.player,
+            this.escortFighters,
+            () => {
+                this.gameOver();
+            },
+            undefined,
+            this
+        );
+
+        // Add collisions for king lantern boss
+        this.physics.add.overlap(
+            this.bullets,
+            this.kingLanternBoss,
+            (bullet: Phaser.GameObjects.GameObject | Phaser.Physics.Arcade.Body | Phaser.Physics.Arcade.StaticBody | Phaser.Tilemaps.Tile,
+             boss: Phaser.GameObjects.GameObject | Phaser.Physics.Arcade.Body | Phaser.Physics.Arcade.StaticBody | Phaser.Tilemaps.Tile) => {
+                if (bullet instanceof Phaser.Physics.Arcade.Image && 
+                    boss instanceof Phaser.Physics.Arcade.Sprite) {
+                    this.handleBulletKingLanternCollision(bullet, boss);
+                }
+            },
+            undefined,
+            this
+        );
+
+        // Add player-king lantern boss collision
+        this.physics.add.overlap(
+            this.player,
+            this.kingLanternBoss,
+            () => {
+                this.gameOver();
+            },
+            undefined,
+            this
+        );
+
+        // Add collisions for elektrode enemies
+        this.physics.add.overlap(
+            this.bullets,
+            this.elektrodeEnemies,
+            (bullet: Phaser.GameObjects.GameObject | Phaser.Physics.Arcade.Body | Phaser.Physics.Arcade.StaticBody | Phaser.Tilemaps.Tile,
+             elektrode: Phaser.GameObjects.GameObject | Phaser.Physics.Arcade.Body | Phaser.Physics.Arcade.StaticBody | Phaser.Tilemaps.Tile) => {
+                if (bullet instanceof Phaser.Physics.Arcade.Image && 
+                    elektrode instanceof Phaser.Physics.Arcade.Sprite) {
+                    this.handleBulletElektrodeCollision(bullet, elektrode);
+                }
+            },
+            undefined,
+            this
+        );
+
+        // Add player-elektrode collision (2% damage)
+        this.physics.add.overlap(
+            this.player,
+            this.elektrodeEnemies,
+            (player: Phaser.GameObjects.GameObject | Phaser.Physics.Arcade.Body | Phaser.Physics.Arcade.StaticBody | Phaser.Tilemaps.Tile,
+             elektrode: Phaser.GameObjects.GameObject | Phaser.Physics.Arcade.Body | Phaser.Physics.Arcade.StaticBody | Phaser.Tilemaps.Tile) => {
+                if (elektrode instanceof Phaser.Physics.Arcade.Sprite) {
+                    this.handlePlayerElektrodeCollision(elektrode);
+                }
+            },
+            undefined,
+            this
+        );
+
         this.setupCheckpointQuestions().catch(error => {
             console.error('Failed to setup checkpoint questions:', error);
         });
@@ -1297,14 +1423,26 @@ this.boss1 = this.physics.add.sprite(500, 500, 'boss1');
                 
                 this.spawnTentacleBoss();
             }
-            
-            // Debug logging for boss spawn conditions
-            if (this.gameState.score >= 15000 && this.gameState.score <= 25000) {
-                // Only log occasionally to avoid spam
-                if (Math.floor(this.gameState.gameTime / 1000) % 5 === 0 && this.gameState.gameTime % 1000 < 50) {
-                    console.log('Boss spawn check - Score:', this.gameState.score, 'Stage:', this.gameState.currentStage, 'Boss Fight:', this.gameState.bossFight, 'Game Completed:', this.gameState.gameCompleted);
-                }
+
+            // Check for king lantern boss spawn conditions - Stage 3 Boss at 25,000 points
+            if (this.gameState.score >= 25000 && this.gameState.currentStage === 3 && !this.gameState.bossFight && !this.gameState.gameCompleted) {
+                console.log('Spawning King Lantern Boss - Score:', this.gameState.score, 'Stage:', this.gameState.currentStage);
+                
+                // Clear all existing enemies before spawning boss
+                this.enemies.clear(true, true);
+                this.laserEnemies.clear(true, true);
+                this.missileEnemies.clear(true, true);
+                this.nukerEnemies.clear(true, true);
+                this.walkerEnemies.clear(true, true);
+                this.geckoLanternEnemies.clear(true, true);
+                this.enemyLasers.clear(true, true);
+                this.enemyMissiles.clear(true, true);
+                this.enemyDebris.clear(true, true);
+                
+                this.spawnKingLanternBoss();
             }
+            
+
 
             // Check for elite enemy spawn
             if (this.gameState.score >= 1000 && !this.gameState.bossFight) {
@@ -1315,27 +1453,56 @@ this.boss1 = this.physics.add.sprite(500, 500, 'boss1');
                 }
             }
 
-            // Check for gecko lantern enemy spawn (Stage 2 only)
-            if (this.gameState.currentStage >= 2 && this.gameState.score >= 3000 && !this.gameState.bossFight) {
-                const geckoSpawnRate = Math.max(12000, this.geckoLanternSpawnDelay - Math.floor(timeMinutes) * 600);
+            // Check for gecko lantern enemy spawn (Stage 3 only) - more frequent spawning
+            if (this.gameState.currentStage >= 3 && this.gameState.score >= 1000 && !this.gameState.bossFight) {
+                const geckoSpawnRate = Math.max(6000, this.geckoLanternSpawnDelay - Math.floor(timeMinutes) * 800);
                 if (time > this.lastGeckoLanternSpawnTime + geckoSpawnRate) {
                     this.spawnGeckoLanternEnemy();
                     this.lastGeckoLanternSpawnTime = time;
                 }
             }
 
+            // Check for elektrode formation spawn (Stage 3 only)
+            if (this.gameState.currentStage >= 3 && this.gameState.score >= 2000 && !this.gameState.bossFight) {
+                const elektrodeSpawnRate = Math.max(8000, this.elektrodeSpawnDelay - Math.floor(timeMinutes) * 400);
+                if (time > this.lastElektrodeSpawnTime + elektrodeSpawnRate) {
+                    this.spawnElektrodeFormation();
+                    this.lastElektrodeSpawnTime = time;
+                }
+            }
+
             // Only spawn regular enemies if not in boss fight
             if (!this.gameState.bossFight) {
-                // Regular enemies spawn faster over time (starts at 2000ms, minimum 500ms)
-                const baseEnemySpawnDelay = Math.max(500, 2000 - Math.floor(timeMinutes) * 150);
-                if (time > this.lastEnemySpawnTime + baseEnemySpawnDelay) {
-                    this.spawnEnemy();
-                    this.lastEnemySpawnTime = time;
-                    
-                    // Chance to spawn additional enemies increases with time
-                    const extraSpawnChance = Math.min(0.5, timeMinutes * 0.05);
-                    if (Math.random() < extraSpawnChance) {
+                // Different enemy spawning logic based on stage
+                if (this.gameState.currentStage <= 2) {
+                    // Stages 1 & 2: Include basic enemies (regular enemies spawn faster over time)
+                    const baseEnemySpawnDelay = Math.max(500, 2000 - Math.floor(timeMinutes) * 150);
+                    if (time > this.lastEnemySpawnTime + baseEnemySpawnDelay) {
                         this.spawnEnemy();
+                        this.lastEnemySpawnTime = time;
+                        
+                        // Chance to spawn additional enemies increases with time
+                        const extraSpawnChance = Math.min(0.5, timeMinutes * 0.05);
+                        if (Math.random() < extraSpawnChance) {
+                            this.spawnEnemy();
+                        }
+                    }
+                } else {
+                    // Stage 3: Only attacking enemies (no basic enemies)
+                    const attackingEnemySpawnDelay = Math.max(800, 3000 - Math.floor(timeMinutes) * 200);
+                    if (time > this.lastEnemySpawnTime + attackingEnemySpawnDelay) {
+                        // Randomly spawn different types of attacking enemies
+                        const enemyType = Math.random();
+                        if (enemyType < 0.4) {
+                            this.spawnLaserEnemy();
+                        } else if (enemyType < 0.7) {
+                            this.spawnMissileEnemy();
+                        } else if (enemyType < 0.9) {
+                            this.spawnNukerEnemy();
+                        } else {
+                            this.spawnEliteEnemy();
+                        }
+                        this.lastEnemySpawnTime = time;
                     }
                 }
 
@@ -1520,6 +1687,48 @@ this.boss1 = this.physics.add.sprite(500, 500, 'boss1');
             }
         });
 
+        // Clean up escort fighters with bounds checking
+        this.escortFighters.getChildren().forEach((enemy) => {
+            if (enemy instanceof Phaser.Physics.Arcade.Sprite) {
+                // Enforce bounds for escort fighters
+                const enemyHalfWidth = enemy.displayWidth / 2;
+                enemy.x = Phaser.Math.Clamp(enemy.x, enemyHalfWidth, gameWidth - enemyHalfWidth);
+                
+                // Destroy if enemy goes too far off screen
+                if (enemy.y > gameHeight + 100) {
+                    enemy.destroy();
+                }
+            }
+        });
+
+        // Clean up king lantern boss with bounds checking
+        this.kingLanternBoss.getChildren().forEach((enemy) => {
+            if (enemy instanceof Phaser.Physics.Arcade.Sprite) {
+                // Enforce bounds for king lantern boss
+                const enemyHalfWidth = enemy.displayWidth / 2;
+                enemy.x = Phaser.Math.Clamp(enemy.x, enemyHalfWidth, gameWidth - enemyHalfWidth);
+                
+                // Destroy if enemy goes too far off screen
+                if (enemy.y > gameHeight + 100) {
+                    enemy.destroy();
+                }
+            }
+        });
+
+        // Clean up elektrode enemies with bounds checking
+        this.elektrodeEnemies.getChildren().forEach((enemy) => {
+            if (enemy instanceof Phaser.Physics.Arcade.Sprite) {
+                // Enforce bounds for elektrode enemies
+                const enemyHalfWidth = enemy.displayWidth / 2;
+                enemy.x = Phaser.Math.Clamp(enemy.x, enemyHalfWidth, gameWidth - enemyHalfWidth);
+                
+                // Destroy if enemy goes too far off screen
+                if (enemy.y > gameHeight + 100) {
+                    enemy.destroy();
+                }
+            }
+        });
+
         // Clean up enemy lasers and missiles
         this.enemyLasers.getChildren().forEach((laser) => {
             if (laser instanceof Phaser.Physics.Arcade.Image && laser.y > gameHeight + 50) {
@@ -1576,8 +1785,8 @@ this.boss1 = this.physics.add.sprite(500, 500, 'boss1');
             this.updateScore(0);
         }
 
-        // Spawn enemy waves in Stage 2
-        if (this.gameState.currentStage >= 2 && time > this.lastWaveSpawnTime + this.waveSpawnDelay) {
+        // Spawn enemy waves in Stages 1 & 2
+        if (this.gameState.currentStage <= 2 && time > this.lastWaveSpawnTime + this.waveSpawnDelay) {
             this.spawnEnemyWave();
             this.lastWaveSpawnTime = time;
         }
@@ -1937,11 +2146,11 @@ this.boss1 = this.physics.add.sprite(500, 500, 'boss1');
         if (this.geckoLanternEnemies.countActive() >= 1) return;
 
         const gameWidth = this.cameras.main.width;
-        const x = Phaser.Math.Between(100, gameWidth - 100);
+        const x = gameWidth / 6; // Position on left side (1/6 from left edge)
         const enemy = this.geckoLanternEnemies.create(x, -50, 'gecko-lantern') as Phaser.Physics.Arcade.Sprite;
         
         if (enemy) {
-            enemy.setScale(0.6); // Slightly smaller than elite enemies
+            enemy.setScale(0.9); // Increased by 50% (was 0.6, now 0.9)
             enemy.setAngle(180); // Rotate to face player's ship
             
             // Set high health (tougher than elite enemies)
@@ -1977,8 +2186,8 @@ this.boss1 = this.physics.add.sprite(500, 500, 'boss1');
                         repeat: -1
                     });
                     
-                    // Circular movement pattern within bounds
-                    const centerX = enemy.x;
+                    // Left-side circular movement pattern
+                    const centerX = gameWidth / 6; // Keep centered on left side
                     const centerY = enemy.y;
                     let angle = 0;
                     
@@ -1987,13 +2196,15 @@ this.boss1 = this.physics.add.sprite(500, 500, 'boss1');
                         callback: () => {
                             if (enemy.active) {
                                 angle += 0.05;
-                                const radius = 40;
+                                const radius = 30; // Smaller radius to stay on left
                                 const newX = centerX + Math.cos(angle) * radius;
                                 const newY = centerY + Math.sin(angle) * radius * 0.5; // Elliptical
                                 
-                                // Clamp to bounds
+                                // Clamp to left side bounds only
                                 const enemyHalfWidth = enemy.displayWidth / 2;
-                                enemy.x = Phaser.Math.Clamp(newX, enemyHalfWidth, gameWidth - enemyHalfWidth);
+                                const leftBound = enemyHalfWidth;
+                                const rightBound = gameWidth / 3; // Don't go past left third of screen
+                                enemy.x = Phaser.Math.Clamp(newX, leftBound, rightBound);
                                 enemy.y = Math.max(50, newY);
                             }
                         },
@@ -2405,7 +2616,7 @@ this.boss1 = this.physics.add.sprite(500, 500, 'boss1');
 
     private spawnTentacleBoss() {
         this.gameState.bossFight = true;
-        this.bossHealth = 400; // Higher health than firecracker boss (300)
+        this.bossHealth = 50; // Reduced for testing (was 400)
 
         // Use camera dimensions for consistent positioning with player bounds
         const gameWidth = this.cameras.main.width;
@@ -2726,6 +2937,113 @@ this.boss1 = this.physics.add.sprite(500, 500, 'boss1');
         }
     }
 
+    private spawnKingLanternBoss() {
+        this.gameState.bossFight = true;
+        this.bossHealth = 300; // King Lantern boss health (3x increased)
+
+        // Use camera dimensions for consistent positioning
+        const gameWidth = this.cameras.main.width;
+
+        // Spawn King Lantern boss more on left side at top
+        const bossX = gameWidth / 8; // More left side positioning (12.5% from left edge)
+        const bossY = 80; // Top hover position
+        const boss = this.kingLanternBoss.create(bossX, -50, 'king-lantern') as Phaser.Physics.Arcade.Sprite;
+
+        if (boss) {
+            boss.setScale(1.2); // Large, imposing size
+            boss.setAngle(180); // Face downward
+            boss.setData('health', this.bossHealth);
+            boss.setData('maxHealth', this.bossHealth);
+            boss.setData('isInvulnerable', true); // Cannot be damaged until escorts are destroyed
+            
+            // Create boss health bar
+            this.bossHealthBar = this.add.graphics();
+            this.bossHealthText = this.add.text(10, 50, 'King Lantern Boss Health: 100%', {
+                fontSize: '16px',
+                color: '#ffffff'
+            });
+            
+            this.updateBossHealthBar();
+
+            // Spawn escort fighters in front and on either side of boss
+            const escort1X = bossX - 60; // Left escort
+            const escort2X = bossX + 60; // Right escort
+            const escortY = bossY + 40; // In front of boss
+
+            // Create first escort (left)
+            const escort1 = this.escortFighters.create(escort1X, -50, 'glow-stones') as Phaser.Physics.Arcade.Sprite;
+            if (escort1) {
+                escort1.setScale(0.8);
+                escort1.setAngle(180);
+                escort1.setData('health', 125); // Very hard to defeat - 5x more damage required
+                escort1.setData('maxHealth', 125);
+                escort1.setData('position', 'left');
+            }
+
+            // Create second escort (right)
+            const escort2 = this.escortFighters.create(escort2X, -50, 'glow-stones') as Phaser.Physics.Arcade.Sprite;
+            if (escort2) {
+                escort2.setScale(0.8);
+                escort2.setAngle(180);
+                escort2.setData('health', 125); // Very hard to defeat - 5x more damage required
+                escort2.setData('maxHealth', 125);
+                escort2.setData('position', 'right');
+            }
+
+            // Animate boss entrance
+            this.tweens.add({
+                targets: boss,
+                y: bossY,
+                duration: 2000,
+                ease: 'Power2',
+                onComplete: () => {
+                    // Start hovering effect
+                    this.tweens.add({
+                        targets: boss,
+                        y: bossY + 15,
+                        duration: 2000,
+                        ease: 'Sine.easeInOut',
+                        yoyo: true,
+                        repeat: -1
+                    });
+                    
+                    // Start boss attack pattern (only visual/sound effects while escorts alive)
+                    this.startKingLanternAttack(boss);
+                }
+            });
+
+            // Animate escorts entrance
+            [escort1, escort2].forEach((escort, index) => {
+                if (escort) {
+                    const targetY = escortY;
+                    this.tweens.add({
+                        targets: escort,
+                        y: targetY,
+                        duration: 2000,
+                        ease: 'Power2',
+                        delay: index * 200, // Staggered entrance
+                        onComplete: () => {
+                            // Start hovering and attack patterns
+                            this.tweens.add({
+                                targets: escort,
+                                y: targetY + 10,
+                                duration: 1500,
+                                ease: 'Sine.easeInOut',
+                                yoyo: true,
+                                repeat: -1
+                            });
+                            
+                            this.startEscortAttack(escort);
+                        }
+                    });
+                }
+            });
+
+            // Play boss appearance sound
+            this.bossExplosionSound.play({ volume: 0.5 });
+        }
+    }
+
     private updateBossHealthBar() {
         if (!this.bossHealthBar || !this.bossHealthText) return;
 
@@ -2739,8 +3057,16 @@ this.boss1 = this.physics.add.sprite(500, 500, 'boss1');
         let maxHealth = 300; // Default for firecracker boss
         let bossName = "Boss";
         
-        // Check if this is tentacle boss (higher health)
-        if (this.bossHealth > 300) {
+        // Check if this is king lantern boss
+        if (this.kingLanternBoss && this.kingLanternBoss.countActive() > 0) {
+            maxHealth = 300;
+            bossName = "King Lantern Boss";
+        }
+        // Check if this is tentacle boss (reduced health for testing)
+        else if (this.bossHealth <= 50) {
+            maxHealth = 50; // Testing value
+            bossName = "Tentacle Boss";
+        } else if (this.bossHealth > 300) {
             maxHealth = 400;
             bossName = "Tentacle Boss";
         }
@@ -2762,8 +3088,8 @@ this.boss1 = this.physics.add.sprite(500, 500, 'boss1');
         // Check if this is a guided rocket
         const isGuided = (bullet as Phaser.Physics.Arcade.Image).getData('guided');
         
-        // Guided rockets deal more damage
-        const damage = isGuided ? 5 : 2;
+        // Increased damage for easier testing (was 5:2, now 15:10)
+        const damage = isGuided ? 15 : 10;
         
         // Reduce boss health
         this.bossHealth = Math.max(0, this.bossHealth - damage);
@@ -2788,6 +3114,9 @@ this.boss1 = this.physics.add.sprite(500, 500, 'boss1');
             const rapidFireTimer = boss.getData('rapidFireTimer');
             const missileTimer = boss.getData('missileTimer');
             const bombTimer = boss.getData('bombTimer');
+            const mainCannonTimer = boss.getData('mainCannonTimer');
+            const swirlTimer = boss.getData('swirlTimer');
+            const burstTimer = boss.getData('burstTimer');
             
             if (rapidFireTimer) {
                 rapidFireTimer.destroy();
@@ -2800,6 +3129,18 @@ this.boss1 = this.physics.add.sprite(500, 500, 'boss1');
             if (bombTimer) {
                 bombTimer.destroy();
                 console.log('Destroyed bomb timer');
+            }
+            if (mainCannonTimer) {
+                mainCannonTimer.destroy();
+                console.log('Destroyed main cannon timer');
+            }
+            if (swirlTimer) {
+                swirlTimer.destroy();
+                console.log('Destroyed swirl timer');
+            }
+            if (burstTimer) {
+                burstTimer.destroy();
+                console.log('Destroyed burst timer');
             }
         }
         
@@ -2814,13 +3155,15 @@ this.boss1 = this.physics.add.sprite(500, 500, 'boss1');
         
         // Remove boss and health bar
         this.bossEnemies.clear(true, true);
+        this.escortFighters.clear(true, true);
+        this.kingLanternBoss.clear(true, true);
         this.bossHealthBar?.destroy();
         this.bossHealthText?.destroy();
         
         // Check if this is the final boss or if there are more stages
         // Only mark game as completed if we're on the final stage
-        if (this.gameState.currentStage >= 2) {
-            // This is the Tentacle Boss (Stage 2) - mark game as completed
+        if (this.gameState.currentStage >= 3) {
+            // Stage 3+ bosses - mark game as completed (no Stage 4 implemented yet)
             this.gameState.gameCompleted = true;
             console.log('Game completed after defeating final boss');
         } else {
@@ -2916,6 +3259,7 @@ this.boss1 = this.physics.add.sprite(500, 500, 'boss1');
         this.startStageMusic(this.gameState.currentStage);
         
         this.gameState.health = 100; // Restore full health
+        this.gameState.score = 0; // Reset score for new stage
         this.gameState.isStageTransition = false;
         this.isPaused = false;
         this.physics.resume();
@@ -2931,9 +3275,18 @@ this.boss1 = this.physics.add.sprite(500, 500, 'boss1');
         this.enemyDebris.clear(true, true);
         this.enemyProjectiles.clear(true, true);
         this.geckoLanternEnemies.clear(true, true);
+        this.escortFighters.clear(true, true);
+        this.kingLanternBoss.clear(true, true);
+        this.elektrodeEnemies.clear(true, true);
         
         // Reset wave direction
         this.waveDirection = 'left';
+        
+        // Reset spawn timers for new stage
+        this.lastGeckoLanternSpawnTime = 0;
+        this.lastElektrodeSpawnTime = 0;
+        this.gameState.lastEliteEnemyTime = 0;
+        this.lastWaveSpawnTime = 0;
         
         // Show stage start message with new background info
         const stageStartText = this.add.text(
@@ -3120,7 +3473,10 @@ this.boss1 = this.physics.add.sprite(500, 500, 'boss1');
             ...this.nukerEnemies.getChildren(),
             ...this.walkerEnemies.getChildren(),
             ...this.bossEnemies.getChildren(),
-            ...this.geckoLanternEnemies.getChildren()
+            ...this.geckoLanternEnemies.getChildren(),
+            ...this.escortFighters.getChildren(),
+            ...this.kingLanternBoss.getChildren(),
+            ...this.elektrodeEnemies.getChildren()
         ];
         
         if (allEnemies.length === 0) return null;
@@ -3301,6 +3657,10 @@ this.boss1 = this.physics.add.sprite(500, 500, 'boss1');
                     this.spawnWalkerDebris(enemy.x, enemy.y);
                     this.updateScore(200);
                     break;
+                case EnemyType.ELEKTRODE:
+                    this.destroyEnemy(enemy, true);
+                    this.updateScore(300);
+                    break;
                 default:
                     this.destroyEnemy(enemy, false);
                     this.updateScore(100);
@@ -3450,6 +3810,9 @@ this.boss1 = this.physics.add.sprite(500, 500, 'boss1');
         this.walkerEnemies.clear(true, true);
         this.enemyProjectiles.clear(true, true);
         this.geckoLanternEnemies.clear(true, true);
+        this.escortFighters.clear(true, true);
+        this.kingLanternBoss.clear(true, true);
+        this.elektrodeEnemies.clear(true, true);
         
         // Reset checkpoint counters
         this.currentCheckpointQuestionIndex = 0;
@@ -3786,6 +4149,595 @@ this.boss1 = this.physics.add.sprite(500, 500, 'boss1');
             
             // Destroy enemy
             enemy.destroy();
+        }
+    }
+
+    private startEscortAttack(escort: Phaser.Physics.Arcade.Sprite) {
+        // Escorts fire green energy balls in bursts of 6
+        const attackEvent = this.time.addEvent({
+            delay: 2000, // Attack every 2 seconds
+            callback: () => {
+                if (escort.active && this.player.active) {
+                    // Fire burst of 6 green energy balls
+                    for (let i = 0; i < 6; i++) {
+                        this.time.delayedCall(i * 100, () => { // 100ms between each shot in burst
+                            if (escort.active) {
+                                const energyBall = this.enemyProjectiles.create(
+                                    escort.x,
+                                    escort.y + 15,
+                                    'escort-cannon'
+                                ) as Phaser.Physics.Arcade.Image;
+                                
+                                if (energyBall) {
+                                    energyBall.setScale(0.4); // Half the current size (was 0.8, now 0.4)
+                                    // No tint needed - laserGreen14.png is already green
+                                    
+                                    // Calculate angle towards player with slight spread
+                                    const baseAngle = Phaser.Math.Angle.Between(
+                                        escort.x, escort.y,
+                                        this.player.x, this.player.y
+                                    );
+                                    const spread = (i - 2.5) * 0.1; // Spread pattern
+                                    const angle = baseAngle + spread;
+                                    
+                                    const speed = 250;
+                                    energyBall.setVelocity(
+                                        Math.cos(angle) * speed,
+                                        Math.sin(angle) * speed
+                                    );
+                                    energyBall.setData('damage', 15);
+                                }
+                            }
+                        });
+                    }
+                    
+                    // Play attack sound
+                    this.laserSound.play({ volume: 0.5, detune: 200 });
+                } else {
+                    // Stop attacking if escort destroyed
+                    attackEvent.destroy();
+                }
+            },
+            loop: true
+        });
+        
+        // Stop attacking when escort is destroyed
+        escort.once('destroy', () => {
+            attackEvent.destroy();
+        });
+    }
+
+    private startKingLanternAttack(boss: Phaser.Physics.Arcade.Sprite) {
+        // Main cannon fireball attack with dynamic timing
+        const fireMainCannon = () => {
+            if (boss.active && this.player.active) {
+                const escortsAlive = this.escortFighters.countActive() > 0;
+                const healthPercentage = this.bossHealth / 300;
+                
+                if (!escortsAlive) {
+                    // Fire main cannon
+                    const fireball = this.enemyProjectiles.create(
+                        boss.x,
+                        boss.y + 20,
+                        'king-fireball'
+                    ) as Phaser.Physics.Arcade.Image;
+                    
+                    if (fireball) {
+                        fireball.setScale(2.4);
+                        
+                        const angle = Phaser.Math.Angle.Between(
+                            boss.x, boss.y,
+                            this.player.x, this.player.y
+                        );
+                        
+                        const speed = 200;
+                        fireball.setVelocity(
+                            Math.cos(angle) * speed,
+                            Math.sin(angle) * speed
+                        );
+                        fireball.setData('damage', 30);
+                        fireball.setRotation(angle + Math.PI/2);
+                    }
+                    
+                    this.bossExplosionSound.play({ volume: 0.6, detune: -200 });
+                } else {
+                    // Charging effect while escorts alive
+                    const chargingEffect = this.add.sprite(boss.x, boss.y, 'fire00');
+                    chargingEffect.setScale(0.8);
+                    chargingEffect.setTint(0x00ff00);
+                    chargingEffect.setAlpha(0.7);
+                    
+                    this.tweens.add({
+                        targets: chargingEffect,
+                        alpha: 0,
+                        scale: 1.5,
+                        duration: 1000,
+                        onComplete: () => {
+                            chargingEffect.destroy();
+                        }
+                    });
+                    
+                    this.laserSound.play({ volume: 0.3, detune: -400 });
+                }
+                
+                // Schedule next attack with health-based delay
+                const nextDelay = Math.max(1000, 3000 * healthPercentage);
+                const nextTimer = this.time.delayedCall(nextDelay, fireMainCannon);
+                boss.setData('mainCannonTimer', nextTimer);
+            }
+        };
+        
+        // Start main cannon attacks
+        fireMainCannon();
+        
+        // Swirling weapons attack with dynamic timing
+        const fireSwirlAttack = () => {
+            if (boss.active && this.player.active) {
+                const escortsAlive = this.escortFighters.countActive() > 0;
+                const healthPercentage = this.bossHealth / 300;
+                
+                if (!escortsAlive) {
+                    this.fireSwirlWeapons(boss, healthPercentage);
+                }
+                
+                // Schedule next swirl attack with health-based delay
+                const nextDelay = Math.max(800, 2000 * healthPercentage);
+                const nextTimer = this.time.delayedCall(nextDelay, fireSwirlAttack);
+                boss.setData('swirlTimer', nextTimer);
+            }
+        };
+        
+        // Start swirl attacks after 2 seconds
+        this.time.delayedCall(2000, fireSwirlAttack);
+        
+        // Rapid burst attack with dynamic timing
+        const fireRapidAttack = () => {
+            if (boss.active && this.player.active) {
+                const escortsAlive = this.escortFighters.countActive() > 0;
+                const healthPercentage = this.bossHealth / 300;
+                
+                if (!escortsAlive && healthPercentage < 0.5) {
+                    this.fireRapidBurst(boss);
+                }
+                
+                // Schedule next burst attack with health-based delay
+                const nextDelay = Math.max(1500, 4000 * healthPercentage);
+                const nextTimer = this.time.delayedCall(nextDelay, fireRapidAttack);
+                boss.setData('burstTimer', nextTimer);
+            }
+        };
+        
+        // Start rapid attacks after 4 seconds
+        this.time.delayedCall(4000, fireRapidAttack);
+        
+        // Cleanup when boss is destroyed
+        boss.once('destroy', () => {
+            const mainCannonTimer = boss.getData('mainCannonTimer');
+            const swirlTimer = boss.getData('swirlTimer');
+            const burstTimer = boss.getData('burstTimer');
+            
+            if (mainCannonTimer) mainCannonTimer.destroy();
+            if (swirlTimer) swirlTimer.destroy();
+            if (burstTimer) burstTimer.destroy();
+        });
+    }
+
+    private fireSwirlWeapons(boss: Phaser.Physics.Arcade.Sprite, healthPercentage: number) {
+        const weaponTypes = ['swirl-weapon-1', 'swirl-weapon-2', 'swirl-weapon-3'];
+        
+        // Number of projectiles increases as health decreases
+        const projectileCount = healthPercentage > 0.66 ? 6 : (healthPercentage > 0.33 ? 8 : 10);
+        
+        for (let i = 0; i < projectileCount; i++) {
+            this.time.delayedCall(i * 150, () => { // Spaced apart timing
+                if (boss.active && this.player.active) {
+                    const weaponType = weaponTypes[i % weaponTypes.length];
+                    const projectile = this.enemyProjectiles.create(
+                        boss.x,
+                        boss.y + 15,
+                        weaponType
+                    ) as Phaser.Physics.Arcade.Image;
+                    
+                    if (projectile) {
+                        projectile.setScale(0.8);
+                        
+                        // Create swirling motion toward player
+                        const baseAngle = Phaser.Math.Angle.Between(
+                            boss.x, boss.y,
+                            this.player.x, this.player.y
+                        );
+                        
+                        // Add swirl offset
+                        const swirlOffset = (i * Math.PI * 2) / 6; // Create spiral pattern
+                        const angle = baseAngle + Math.sin(swirlOffset) * 0.5;
+                        
+                        const speed = 180;
+                        projectile.setVelocity(
+                            Math.cos(angle) * speed,
+                            Math.sin(angle) * speed
+                        );
+                        projectile.setData('damage', 20);
+                        
+                        // Add continuous swirling motion
+                        let swirlAngle = 0;
+                        const swirlEvent = this.time.addEvent({
+                            delay: 50,
+                            callback: () => {
+                                if (projectile.active) {
+                                    swirlAngle += 0.2;
+                                    const currentVel = projectile.body?.velocity;
+                                    if (currentVel) {
+                                        const magnitude = Math.sqrt(currentVel.x * currentVel.x + currentVel.y * currentVel.y);
+                                        const newAngle = Math.atan2(currentVel.y, currentVel.x) + Math.sin(swirlAngle) * 0.1;
+                                        
+                                        projectile.setVelocity(
+                                            Math.cos(newAngle) * magnitude,
+                                            Math.sin(newAngle) * magnitude
+                                        );
+                                    }
+                                } else {
+                                    swirlEvent.destroy();
+                                }
+                            },
+                            repeat: 40 // Swirl for about 2 seconds
+                        });
+                        
+                        projectile.once('destroy', () => {
+                            if (swirlEvent) {
+                                swirlEvent.destroy();
+                            }
+                        });
+                    }
+                }
+            });
+        }
+        
+        // Play swirl attack sound
+        this.laserSound.play({ volume: 0.4, detune: 100 });
+    }
+
+    private fireRapidBurst(boss: Phaser.Physics.Arcade.Sprite) {
+        // Desperate rapid-fire attack when health is low
+        for (let i = 0; i < 12; i++) {
+            this.time.delayedCall(i * 100, () => {
+                if (boss.active && this.player.active) {
+                    const projectile = this.enemyProjectiles.create(
+                        boss.x + (i % 2 === 0 ? -10 : 10),
+                        boss.y + 20,
+                        'swirl-weapon-2'
+                    ) as Phaser.Physics.Arcade.Image;
+                    
+                    if (projectile) {
+                        projectile.setScale(0.6);
+                        
+                        const angle = Phaser.Math.Angle.Between(
+                            boss.x, boss.y,
+                            this.player.x, this.player.y
+                        ) + (Math.random() - 0.5) * 0.3; // Random spread
+                        
+                        const speed = 250;
+                        projectile.setVelocity(
+                            Math.cos(angle) * speed,
+                            Math.sin(angle) * speed
+                        );
+                        projectile.setData('damage', 15);
+                    }
+                }
+            });
+        }
+        
+        // Play rapid burst sound
+        this.bossExplosionSound.play({ volume: 0.5, detune: 400 });
+    }
+
+    private spawnElektrodeFormation() {
+        // Spawn 4 Elektrodes in diamond formation
+        const gameWidth = this.cameras.main.width;
+        const formations = [
+            { x: gameWidth * 0.3, y: -50, delay: 0 },      // Lead
+            { x: gameWidth * 0.25, y: -80, delay: 200 },   // Left wing
+            { x: gameWidth * 0.35, y: -80, delay: 200 },   // Right wing
+            { x: gameWidth * 0.3, y: -110, delay: 400 }    // Rear
+        ];
+
+        formations.forEach((pos, index) => {
+            this.time.delayedCall(pos.delay, () => {
+                const elektrode = this.elektrodeEnemies.create(pos.x, pos.y, 'elektrode-enemy') as Phaser.Physics.Arcade.Sprite;
+                
+                if (elektrode) {
+                    elektrode.setScale(0.64); // 20% smaller than default (0.8 * 0.8)
+                    elektrode.setAngle(180); // Face downward
+                    elektrode.setData('health', 1); // One hit destroy
+                    elektrode.setData('formationIndex', index);
+                    elektrode.setData('isHovering', true);
+                    
+                    // Move to hover position
+                    this.tweens.add({
+                        targets: elektrode,
+                        y: 120, // Hover position
+                        duration: 1500,
+                        ease: 'Power2',
+                        onComplete: () => {
+                            if (elektrode.active) {
+                                // Hover for 3 seconds
+                                this.tweens.add({
+                                    targets: elektrode,
+                                    y: '+=10',
+                                    duration: 1000,
+                                    yoyo: true,
+                                    repeat: -1
+                                });
+                                
+                                // Start lightning attack after 1 second of hovering
+                                this.time.delayedCall(1000, () => {
+                                    if (elektrode.active) {
+                                        this.startLightningAttack(elektrode);
+                                    }
+                                });
+                                
+                                // Start moving down after 4 seconds
+                                this.time.delayedCall(4000, () => {
+                                    if (elektrode.active) {
+                                        elektrode.setData('isHovering', false);
+                                        this.tweens.killTweensOf(elektrode);
+                                        elektrode.setVelocityY(150);
+                                    }
+                                });
+                            }
+                        }
+                    });
+                }
+            });
+        });
+
+        console.log('Spawned Elektrode formation');
+    }
+
+    private startLightningAttack(elektrode: Phaser.Physics.Arcade.Sprite) {
+        // Lightning attack every 2 seconds while hovering
+        const attackTimer = this.time.addEvent({
+            delay: 2000,
+            callback: () => {
+                if (elektrode.active && elektrode.getData('isHovering') && this.player.active) {
+                    this.fireLightningBolt(elektrode);
+                } else {
+                    attackTimer.destroy();
+                }
+            },
+            loop: true
+        });
+        
+        elektrode.once('destroy', () => {
+            if (attackTimer) {
+                attackTimer.destroy();
+            }
+        });
+    }
+
+    private fireLightningBolt(elektrode: Phaser.Physics.Arcade.Sprite) {
+        // Create zig-zag lightning bolt pattern
+        const startX = elektrode.x;
+        const startY = elektrode.y + 20;
+        const targetX = this.player.x;
+        const targetY = this.player.y;
+        
+        const segments = 8; // Number of lightning segments
+        const segmentLength = Math.abs(targetY - startY) / segments;
+        const zigzagWidth = 40; // How far the lightning can zig-zag
+        
+        for (let i = 0; i < segments; i++) {
+            this.time.delayedCall(i * 80, () => { // Delay between segments
+                if (elektrode.active) {
+                    // Calculate zig-zag position
+                    const progress = i / segments;
+                    const baseX = startX + (targetX - startX) * progress;
+                    const baseY = startY + segmentLength * i;
+                    
+                    // Add zig-zag offset
+                    const zigzagOffset = Math.sin(i * 1.5) * zigzagWidth * (1 - progress * 0.5);
+                    const segmentX = baseX + zigzagOffset;
+                    
+                    // Alternate between lightning bolt assets
+                    const boltAsset = i % 2 === 0 ? 'lightning-bolt-1' : 'lightning-bolt-2';
+                    
+                    const lightningSegment = this.enemyProjectiles.create(
+                        segmentX,
+                        baseY,
+                        boltAsset
+                    ) as Phaser.Physics.Arcade.Image;
+                    
+                    if (lightningSegment) {
+                        lightningSegment.setScale(0.8);
+                        lightningSegment.setTint(0x88ff88); // Electric green tint
+                        
+                        // Calculate angle for this segment
+                        const nextProgress = (i + 1) / segments;
+                        const nextBaseX = startX + (targetX - startX) * nextProgress;
+                        const nextZigzagOffset = Math.sin((i + 1) * 1.5) * zigzagWidth * (1 - nextProgress * 0.5);
+                        const nextX = nextBaseX + nextZigzagOffset;
+                        const nextY = baseY + segmentLength;
+                        
+                        const angle = Math.atan2(nextY - baseY, nextX - segmentX);
+                        lightningSegment.setRotation(angle + Math.PI / 2);
+                        
+                        // Fast movement toward target
+                        const speed = 400;
+                        lightningSegment.setVelocity(
+                            Math.cos(angle) * speed,
+                            Math.sin(angle) * speed
+                        );
+                        lightningSegment.setData('damage', 8); // Moderate damage
+                        
+                        // Add crackling effect
+                        this.tweens.add({
+                            targets: lightningSegment,
+                            alpha: 0.3,
+                            duration: 100,
+                            yoyo: true,
+                            repeat: 2
+                        });
+                    }
+                }
+            });
+        }
+        
+        // Play lightning sound
+        this.laserSound.play({ volume: 0.5, detune: -600 });
+    }
+
+    private handleBulletElektrodeCollision(bullet: Phaser.Physics.Arcade.Image, elektrode: Phaser.Physics.Arcade.Sprite) {
+        bullet.destroy();
+        
+        // Elektrodes are destroyed in one hit
+        this.createExplosion(elektrode.x, elektrode.y, 0.8);
+        this.explosionSound.play({ volume: 0.3 });
+        this.updateScore(300); // Medium score
+        
+        elektrode.destroy();
+    }
+
+    private handlePlayerElektrodeCollision(elektrode: Phaser.Physics.Arcade.Sprite) {
+        if (this.godModeActive) {
+            return; // Player is immune in god mode
+        }
+        
+        // 2% damage
+        this.gameState.health = Math.max(0, this.gameState.health - 2);
+        
+        // Destroy the elektrode on contact
+        this.createExplosion(elektrode.x, elektrode.y, 0.8);
+        this.explosionSound.play({ volume: 0.3 });
+        elektrode.destroy();
+        
+        if (this.gameState.health <= 0) {
+            this.gameOver();
+        } else {
+            // Update health display
+            this.healthText.setText(`Health: ${this.gameState.health}%`);
+            
+            // Flash player
+            this.player.setTint(0xff0000);
+            this.time.delayedCall(200, () => {
+                if (this.player.active) {
+                    this.player.clearTint();
+                }
+            });
+        }
+    }
+
+    private handleBulletEscortCollision(bullet: Phaser.Physics.Arcade.Image, escort: Phaser.Physics.Arcade.Sprite) {
+        bullet.destroy();
+        
+        // Get current health and reduce it
+        const health = (escort.getData('health') || 0) - 1;
+        escort.setData('health', health);
+        
+        // Flash escort with green tint
+        escort.setTint(0x00ff00);
+        this.time.delayedCall(100, () => {
+            if (escort.active) {
+                escort.clearTint();
+            }
+        });
+        
+        // Check if escort is destroyed
+        if (health <= 0) {
+            // Create explosion effect
+            this.createExplosion(escort.x, escort.y, 1.2);
+            
+            // Play explosion sound
+            this.explosionSound.play();
+            
+            // Add score
+            this.updateScore(1000);
+            
+            // Check if all escorts are destroyed
+            const remainingEscorts = this.escortFighters.countActive() - 1; // -1 because this one is about to be destroyed
+            
+            if (remainingEscorts === 0) {
+                // All escorts destroyed - make boss vulnerable
+                this.kingLanternBoss.getChildren().forEach((boss) => {
+                    if (boss instanceof Phaser.Physics.Arcade.Sprite) {
+                        boss.setData('isInvulnerable', false);
+                        
+                        // Visual effect to show boss is now vulnerable
+                        boss.setTint(0xff4444);
+                        this.time.delayedCall(300, () => {
+                            if (boss.active) {
+                                boss.clearTint();
+                            }
+                        });
+                    }
+                });
+                
+                // Show message
+                const vulnerableText = this.add.text(
+                    this.cameras.main.width / 2,
+                    this.cameras.main.height / 2,
+                    'ESCORTS DESTROYED!\nKING LANTERN VULNERABLE!',
+                    { fontSize: '24px', color: '#ffff00', align: 'center' }
+                ).setOrigin(0.5).setDepth(1000);
+                
+                this.tweens.add({
+                    targets: vulnerableText,
+                    alpha: 0,
+                    y: vulnerableText.y - 50,
+                    duration: 2000,
+                    onComplete: () => {
+                        vulnerableText.destroy();
+                    }
+                });
+            }
+            
+            // Destroy escort
+            escort.destroy();
+        }
+    }
+
+    private handleBulletKingLanternCollision(bullet: Phaser.Physics.Arcade.Image, boss: Phaser.Physics.Arcade.Sprite) {
+        // Check if boss is invulnerable (escorts still alive)
+        if (boss.getData('isInvulnerable')) {
+            bullet.destroy();
+            
+            // Show invulnerable effect
+            const shieldEffect = this.add.sprite(boss.x, boss.y, 'shield1');
+            shieldEffect.setScale(1.5);
+            shieldEffect.setAlpha(0.7);
+            
+            this.tweens.add({
+                targets: shieldEffect,
+                alpha: 0,
+                scale: 2.0,
+                duration: 300,
+                onComplete: () => {
+                    shieldEffect.destroy();
+                }
+            });
+            
+            // Play shield sound
+            this.laserSound.play({ volume: 0.2, detune: 800 });
+            return;
+        }
+        
+        // Boss is vulnerable - handle normal collision
+        bullet.destroy();
+        
+        // Check if this is a guided rocket
+        const isGuided = (bullet as Phaser.Physics.Arcade.Image).getData('guided');
+        
+        // Normal boss damage
+        const damage = isGuided ? 15 : 10;
+        
+        // Reduce boss health
+        this.bossHealth = Math.max(0, this.bossHealth - damage);
+        this.updateBossHealthBar();
+
+        // Create hit effect at boss position
+        this.createHitEffect(boss.x, boss.y);
+
+        // Check if boss is defeated
+        if (this.bossHealth <= 0) {
+            this.handleBossDefeat();
         }
     }
 
