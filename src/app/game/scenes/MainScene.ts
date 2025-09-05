@@ -336,9 +336,11 @@ export class MainScene extends Phaser.Scene {
             case 1:
                 return 'player'; // Original ship1.png
             case 2:
+                return 'player-stage2'; // ship3.png for Stage 2
             case 3:
+                return 'player-stage3'; // boombox.png for Stage 3
             case 4:
-                return 'player-stage2'; // ship3.png for Stage 2+
+                return 'player-stage2'; // ship3.png for Stage 4+ (fallback)
             default:
                 return 'player'; // Fallback to original ship
         }
@@ -377,10 +379,15 @@ export class MainScene extends Phaser.Scene {
             this.updateFireRate();
             
             // Show ship upgrade notification
+            let upgradeMessage = 'SHIP UPGRADED!\n+20% FIRE RATE';
+            if (newStage === 3) {
+                upgradeMessage = 'BOOMBOX SHIP ACQUIRED!\n+20% FIRE RATE';
+            }
+            
             const shipUpgradeText = this.add.text(
                 this.cameras.main.width / 2,
                 this.cameras.main.height / 2 + 50,
-                'SHIP UPGRADED!\n+20% FIRE RATE',
+                upgradeMessage,
                 { 
                     fontSize: '24px', 
                     color: '#00ff88',
@@ -442,6 +449,9 @@ export class MainScene extends Phaser.Scene {
         
         // Load Stage 2 player ship
         this.load.image('player-stage2', 'assets/skyforce_assets/PNG/Ships/ship3.png');
+        
+        // Load Stage 3 player ship (Boombox)
+        this.load.image('player-stage3', 'assets/skyforce_assets/PNG/Ships/boombox.png');
         
         // Load enemy ships
         this.load.image('enemy', 'assets/skyforce_assets/PNG/Enemies/enemyRed1.png');
@@ -1424,8 +1434,8 @@ this.boss1 = this.physics.add.sprite(500, 500, 'boss1');
                 this.spawnTentacleBoss();
             }
 
-            // Check for king lantern boss spawn conditions - Stage 3 Boss at 25,000 points
-            if (this.gameState.score >= 25000 && this.gameState.currentStage === 3 && !this.gameState.bossFight && !this.gameState.gameCompleted) {
+            // Check for king lantern boss spawn conditions - Stage 3 Boss at 35,000 points
+            if (this.gameState.score >= 35000 && this.gameState.currentStage === 3 && !this.gameState.bossFight && !this.gameState.gameCompleted) {
                 console.log('Spawning King Lantern Boss - Score:', this.gameState.score, 'Stage:', this.gameState.currentStage);
                 
                 // Clear all existing enemies before spawning boss
@@ -2939,7 +2949,7 @@ this.boss1 = this.physics.add.sprite(500, 500, 'boss1');
 
     private spawnKingLanternBoss() {
         this.gameState.bossFight = true;
-        this.bossHealth = 300; // King Lantern boss health (3x increased)
+        this.bossHealth = 3000; // King Lantern boss health (10x increased from original 300)
 
         // Use camera dimensions for consistent positioning
         const gameWidth = this.cameras.main.width;
@@ -3059,14 +3069,14 @@ this.boss1 = this.physics.add.sprite(500, 500, 'boss1');
         
         // Check if this is king lantern boss
         if (this.kingLanternBoss && this.kingLanternBoss.countActive() > 0) {
-            maxHealth = 300;
+            maxHealth = 3000;
             bossName = "King Lantern Boss";
         }
         // Check if this is tentacle boss (reduced health for testing)
         else if (this.bossHealth <= 50) {
             maxHealth = 50; // Testing value
             bossName = "Tentacle Boss";
-        } else if (this.bossHealth > 300) {
+        } else if (this.bossHealth > 300 && this.bossHealth <= 400) {
             maxHealth = 400;
             bossName = "Tentacle Boss";
         }
@@ -4212,7 +4222,7 @@ this.boss1 = this.physics.add.sprite(500, 500, 'boss1');
         const fireMainCannon = () => {
             if (boss.active && this.player.active) {
                 const escortsAlive = this.escortFighters.countActive() > 0;
-                const healthPercentage = this.bossHealth / 300;
+                const healthPercentage = this.bossHealth / 3000;
                 
                 if (!escortsAlive) {
                     // Fire main cannon
@@ -4274,7 +4284,7 @@ this.boss1 = this.physics.add.sprite(500, 500, 'boss1');
         const fireSwirlAttack = () => {
             if (boss.active && this.player.active) {
                 const escortsAlive = this.escortFighters.countActive() > 0;
-                const healthPercentage = this.bossHealth / 300;
+                const healthPercentage = this.bossHealth / 3000;
                 
                 if (!escortsAlive) {
                     this.fireSwirlWeapons(boss, healthPercentage);
@@ -4294,7 +4304,7 @@ this.boss1 = this.physics.add.sprite(500, 500, 'boss1');
         const fireRapidAttack = () => {
             if (boss.active && this.player.active) {
                 const escortsAlive = this.escortFighters.countActive() > 0;
-                const healthPercentage = this.bossHealth / 300;
+                const healthPercentage = this.bossHealth / 3000;
                 
                 if (!escortsAlive && healthPercentage < 0.5) {
                     this.fireRapidBurst(boss);
@@ -4445,7 +4455,7 @@ this.boss1 = this.physics.add.sprite(500, 500, 'boss1');
                 const elektrode = this.elektrodeEnemies.create(pos.x, pos.y, 'elektrode-enemy') as Phaser.Physics.Arcade.Sprite;
                 
                 if (elektrode) {
-                    elektrode.setScale(0.64); // 20% smaller than default (0.8 * 0.8)
+                    elektrode.setScale(0.448); // 30% smaller than previous size (0.64 * 0.7)
                     elektrode.setAngle(180); // Face downward
                     elektrode.setData('health', 1); // One hit destroy
                     elektrode.setData('formationIndex', index);
@@ -4515,62 +4525,48 @@ this.boss1 = this.physics.add.sprite(500, 500, 'boss1');
     }
 
     private fireLightningBolt(elektrode: Phaser.Physics.Arcade.Sprite) {
-        // Create zig-zag lightning bolt pattern
+        // Create straight horizontal line attack pattern
         const startX = elektrode.x;
         const startY = elektrode.y + 20;
-        const targetX = this.player.x;
-        const targetY = this.player.y;
+        const gameWidth = this.cameras.main.width;
         
-        const segments = 8; // Number of lightning segments
-        const segmentLength = Math.abs(targetY - startY) / segments;
-        const zigzagWidth = 40; // How far the lightning can zig-zag
+        const projectiles = 8; // Number of projectiles in horizontal line
+        const spacing = 60; // Space between projectiles
+        const lineWidth = projectiles * spacing;
         
-        for (let i = 0; i < segments; i++) {
-            this.time.delayedCall(i * 80, () => { // Delay between segments
+        // Center the line horizontally around the elektrode
+        const lineStartX = startX - (lineWidth / 2);
+        
+        for (let i = 0; i < projectiles; i++) {
+            this.time.delayedCall(i * 60, () => { // Delay between projectiles
                 if (elektrode.active) {
-                    // Calculate zig-zag position
-                    const progress = i / segments;
-                    const baseX = startX + (targetX - startX) * progress;
-                    const baseY = startY + segmentLength * i;
+                    const projectileX = lineStartX + (i * spacing);
                     
-                    // Add zig-zag offset
-                    const zigzagOffset = Math.sin(i * 1.5) * zigzagWidth * (1 - progress * 0.5);
-                    const segmentX = baseX + zigzagOffset;
+                    // Ensure projectiles stay within screen bounds
+                    const clampedX = Phaser.Math.Clamp(projectileX, 30, gameWidth - 30);
                     
                     // Alternate between lightning bolt assets
                     const boltAsset = i % 2 === 0 ? 'lightning-bolt-1' : 'lightning-bolt-2';
                     
-                    const lightningSegment = this.enemyProjectiles.create(
-                        segmentX,
-                        baseY,
+                    const lightningProjectile = this.enemyProjectiles.create(
+                        clampedX,
+                        startY,
                         boltAsset
                     ) as Phaser.Physics.Arcade.Image;
                     
-                    if (lightningSegment) {
-                        lightningSegment.setScale(0.8);
-                        lightningSegment.setTint(0x88ff88); // Electric green tint
+                    if (lightningProjectile) {
+                        lightningProjectile.setScale(0.8);
+                        lightningProjectile.setTint(0x88ff88); // Electric green tint
+                        lightningProjectile.setRotation(Math.PI / 2); // Point downward
                         
-                        // Calculate angle for this segment
-                        const nextProgress = (i + 1) / segments;
-                        const nextBaseX = startX + (targetX - startX) * nextProgress;
-                        const nextZigzagOffset = Math.sin((i + 1) * 1.5) * zigzagWidth * (1 - nextProgress * 0.5);
-                        const nextX = nextBaseX + nextZigzagOffset;
-                        const nextY = baseY + segmentLength;
-                        
-                        const angle = Math.atan2(nextY - baseY, nextX - segmentX);
-                        lightningSegment.setRotation(angle + Math.PI / 2);
-                        
-                        // Fast movement toward target
-                        const speed = 400;
-                        lightningSegment.setVelocity(
-                            Math.cos(angle) * speed,
-                            Math.sin(angle) * speed
-                        );
-                        lightningSegment.setData('damage', 8); // Moderate damage
+                        // Straight downward movement
+                        const speed = 350;
+                        lightningProjectile.setVelocity(0, speed);
+                        lightningProjectile.setData('damage', 8); // Moderate damage
                         
                         // Add crackling effect
                         this.tweens.add({
-                            targets: lightningSegment,
+                            targets: lightningProjectile,
                             alpha: 0.3,
                             duration: 100,
                             yoyo: true,
