@@ -24,6 +24,7 @@ interface GameState {
     godModeEndTime: number;
     godModeUsesRemaining: number;
     lastGodModeUseTime: number;
+    lastZombieWalkerSpawnTime: number;
 }
 
 enum EnemyType {
@@ -60,6 +61,7 @@ export class MainScene extends Phaser.Scene {
     private missileEnemies!: Phaser.Physics.Arcade.Group;
     private nukerEnemies!: Phaser.Physics.Arcade.Group;
     private walkerEnemies!: Phaser.Physics.Arcade.Group;
+    private zombieWalkerEnemies!: Phaser.Physics.Arcade.Group;
     private enemyLasers!: Phaser.Physics.Arcade.Group;
     private enemyMissiles!: Phaser.Physics.Arcade.Group;
     private enemyDebris!: Phaser.Physics.Arcade.Group;
@@ -93,7 +95,8 @@ export class MainScene extends Phaser.Scene {
         isGodMode: false,
         godModeEndTime: 0,
         godModeUsesRemaining: 5,
-        lastGodModeUseTime: 0
+        lastGodModeUseTime: 0,
+        lastZombieWalkerSpawnTime: 0
     };
     private mathQuestionsEnabled: boolean = false;
 
@@ -462,6 +465,12 @@ export class MainScene extends Phaser.Scene {
         this.load.image('nuker-enemy', 'assets/skyforce_assets/PNG/Enemies/enemyGreen5.png');
         this.load.image('walker-enemy', 'assets/skyforce_assets/PNG/Enemies/enemyBlack3.png');
         
+        // Load Zombie Walker animation frames
+        for (let i = 1; i <= 15; i++) {
+            const frameNumber = i.toString().padStart(4, '0');
+            this.load.image(`zombie-walker-${frameNumber}`, `assets/skyforce_assets/PNG/Enemies/Zombie_Walker/${frameNumber}.png`);
+        }
+        
         // Load elite enemy
         this.load.image('elite-enemy', 'assets/skyforce_assets/PNG/Enemies/nicey_not.png');
         
@@ -785,6 +794,19 @@ export class MainScene extends Phaser.Scene {
             repeat: 0
         });
 
+        // Create zombie walker walking animation
+        this.anims.create({
+            key: 'zombie-walk',
+            frames: Array.from({ length: 15 }, (_, i) => {
+                const frameNumber = (i + 1).toString().padStart(4, '0');
+                return { key: `zombie-walker-${frameNumber}` };
+            }),
+            frameRate: 8, // Slower frame rate for more menacing walk
+            repeat: -1
+        });
+        
+        console.log('Zombie walker animation created with 15 frames');
+
         // Create groups
         this.bullets = this.physics.add.group({
             classType: Phaser.Physics.Arcade.Image,
@@ -813,6 +835,11 @@ export class MainScene extends Phaser.Scene {
         });
 
         this.walkerEnemies = this.physics.add.group({
+            classType: Phaser.Physics.Arcade.Sprite,
+            runChildUpdate: true
+        });
+
+        this.zombieWalkerEnemies = this.physics.add.group({
             classType: Phaser.Physics.Arcade.Sprite,
             runChildUpdate: true
         });
@@ -999,6 +1026,35 @@ this.boss1 = this.physics.add.sprite(500, 500, 'boss1');
              walker: Phaser.GameObjects.GameObject | Phaser.Physics.Arcade.Body | Phaser.Physics.Arcade.StaticBody | Phaser.Tilemaps.Tile) => {
                 if (walker instanceof Phaser.Physics.Arcade.Sprite) {
                     this.handlePlayerWalkerHit();
+                }
+            },
+            undefined,
+            this
+        );
+
+        // Add collisions for zombie walker enemies
+        this.physics.add.overlap(
+            this.bullets,
+            this.zombieWalkerEnemies,
+            (bullet: Phaser.GameObjects.GameObject | Phaser.Physics.Arcade.Body | Phaser.Physics.Arcade.StaticBody | Phaser.Tilemaps.Tile,
+             enemy: Phaser.GameObjects.GameObject | Phaser.Physics.Arcade.Body | Phaser.Physics.Arcade.StaticBody | Phaser.Tilemaps.Tile) => {
+                if (bullet instanceof Phaser.Physics.Arcade.Image && 
+                    enemy instanceof Phaser.Physics.Arcade.Sprite) {
+                    this.handleBulletZombieWalkerCollision(bullet, enemy);
+                }
+            },
+            undefined,
+            this
+        );
+
+        // Add collision for zombie walker
+        this.physics.add.overlap(
+            this.player,
+            this.zombieWalkerEnemies,
+            (player: Phaser.GameObjects.GameObject | Phaser.Physics.Arcade.Body | Phaser.Physics.Arcade.StaticBody | Phaser.Tilemaps.Tile,
+             zombieWalker: Phaser.GameObjects.GameObject | Phaser.Physics.Arcade.Body | Phaser.Physics.Arcade.StaticBody | Phaser.Tilemaps.Tile) => {
+                if (zombieWalker instanceof Phaser.Physics.Arcade.Sprite) {
+                    this.handleZombieWalkerPlayerCollision();
                 }
             },
             undefined,
@@ -1415,6 +1471,7 @@ this.boss1 = this.physics.add.sprite(500, 500, 'boss1');
                 this.missileEnemies.clear(true, true);
                 this.nukerEnemies.clear(true, true);
                 this.walkerEnemies.clear(true, true);
+        this.zombieWalkerEnemies.clear(true, true);
                 this.enemyLasers.clear(true, true);
                 this.enemyMissiles.clear(true, true);
                 this.enemyDebris.clear(true, true);
@@ -1432,6 +1489,7 @@ this.boss1 = this.physics.add.sprite(500, 500, 'boss1');
                 this.missileEnemies.clear(true, true);
                 this.nukerEnemies.clear(true, true);
                 this.walkerEnemies.clear(true, true);
+        this.zombieWalkerEnemies.clear(true, true);
                 this.enemyLasers.clear(true, true);
                 this.enemyMissiles.clear(true, true);
                 this.enemyDebris.clear(true, true);
@@ -1449,6 +1507,7 @@ this.boss1 = this.physics.add.sprite(500, 500, 'boss1');
                 this.missileEnemies.clear(true, true);
                 this.nukerEnemies.clear(true, true);
                 this.walkerEnemies.clear(true, true);
+        this.zombieWalkerEnemies.clear(true, true);
                 this.geckoLanternEnemies.clear(true, true);
                 this.enemyLasers.clear(true, true);
                 this.enemyMissiles.clear(true, true);
@@ -1552,6 +1611,15 @@ this.boss1 = this.physics.add.sprite(500, 500, 'boss1');
                     this.spawnWalkerGroup();
                     this.lastWalkerSpawnTime = time;
                 }
+
+                // Zombie Walker enemies spawn in Stages 1 and 3 (starts at 20000ms, minimum 12000ms)
+                if (this.gameState.currentStage === 1 || this.gameState.currentStage === 3) {
+                    const zombieWalkerSpawnRate = Math.max(12000, 20000 - Math.floor(timeMinutes) * 800);
+                    if (time > this.gameState.lastZombieWalkerSpawnTime + zombieWalkerSpawnRate) {
+                        this.spawnZombieWalker();
+                        this.gameState.lastZombieWalkerSpawnTime = time;
+                    }
+                }
             }
         }
 
@@ -1586,6 +1654,34 @@ this.boss1 = this.physics.add.sprite(500, 500, 'boss1');
             });
             this.lastMissileShootTime = time;
         }
+
+        // Update zombie walker enemies movement with bounds checking
+        this.zombieWalkerEnemies.getChildren().forEach((zombieWalker) => {
+            if (zombieWalker instanceof Phaser.Physics.Arcade.Sprite) {
+                // Slow walking speed
+                const walkSpeed = 80;
+                const gameWidth = this.cameras.main.width;
+                const gameHeight = this.cameras.main.height;
+                
+                // Keep zombie walker moving downward steadily
+                if (zombieWalker.y < gameHeight + 100) {
+                    zombieWalker.setVelocityY(walkSpeed);
+                    // Enforce horizontal bounds
+                    const zombieHalfWidth = zombieWalker.displayWidth / 2;
+                    zombieWalker.x = Phaser.Math.Clamp(zombieWalker.x, zombieHalfWidth, gameWidth - zombieHalfWidth);
+                    
+                    // Zombie Walker laser shooting - shoot every 2 seconds toward player
+                    const lastAttackTime = zombieWalker.getData('lastAttackTime') || 0;
+                    if (time > lastAttackTime + 2000 && this.player.active) { // 2 seconds between shots
+                        this.zombieWalkerShootLaser(zombieWalker);
+                        zombieWalker.setData('lastAttackTime', time);
+                    }
+                } else {
+                    // Destroy if too far off screen
+                    zombieWalker.destroy();
+                }
+            }
+        });
 
         // Update walker enemies movement with bounds checking
         this.walkerEnemies.getChildren().forEach((walker) => {
@@ -2090,6 +2186,33 @@ this.boss1 = this.physics.add.sprite(500, 500, 'boss1');
         });
     }
 
+    private spawnZombieWalker() {
+        // Limit to 1 Zombie Walker at a time - it's a boss-level enemy in Stages 1 & 3
+        if (this.zombieWalkerEnemies.countActive() >= 1) return;
+
+        // Spawn in specific range (50-500px)
+        const x = Phaser.Math.Between(50, 500);
+        const zombieWalker = this.zombieWalkerEnemies.create(x, -100, 'zombie-walker-0001') as Phaser.Physics.Arcade.Sprite;
+        
+        if (zombieWalker) {
+            zombieWalker.setScale(1.2); // Large, intimidating size
+            // Remove angle rotation - zombie walker frames should be naturally oriented downward
+            
+            // Set massive health - this is a boss-level enemy for Stage 1 & 3
+            zombieWalker.setData('health', 500);
+            zombieWalker.setData('maxHealth', 500);
+            zombieWalker.setData('lastAttackTime', 0); // Track when it last attacked
+            
+            // Start walking animation immediately
+            zombieWalker.play('zombie-walk');
+            
+            // Initial slow walking movement downward
+            zombieWalker.setVelocityY(60);
+            
+            console.log('Zombie Walker spawned with 500 HP and animation at position:', x, -100);
+        }
+    }
+
     private spawnEliteEnemy() {
         const gameWidth = this.cameras.main.width;
         // Use conservative bounds to ensure enemies stay within screen
@@ -2159,29 +2282,28 @@ this.boss1 = this.physics.add.sprite(500, 500, 'boss1');
     }
 
     private spawnGeckoLanternEnemy() {
-        // Limit to 1 at a time to make it special
-        if (this.geckoLanternEnemies.countActive() >= 1) return;
+        // Limit to 3 at a time for enhanced threat
+        if (this.geckoLanternEnemies.countActive() >= 3) return;
 
-        const gameWidth = this.cameras.main.width;
-        // Ensure gecko lantern stays safely within bounds
-        const margin = 80;
-        const x = Math.max(margin, gameWidth / 6); // Position on left side but respect margin
-        const enemy = this.geckoLanternEnemies.create(x, -50, 'gecko-lantern') as Phaser.Physics.Arcade.Sprite;
+        // Spawn 3 Gecko Lanterns at different positions (50px-600px range)
+        for (let i = 0; i < 3; i++) {
+            const x = Phaser.Math.Between(50, 600); // New horizontal range
+            const enemy = this.geckoLanternEnemies.create(x, -50 - (i * 30), 'gecko-lantern') as Phaser.Physics.Arcade.Sprite;
         
-        if (enemy) {
-            enemy.setScale(1.35); // Increased to 1.5x size
-            enemy.setAngle(180); // Rotate to face player's ship
+            if (enemy) {
+                enemy.setScale(1.35); // Increased to 1.5x size
+                enemy.setAngle(180); // Rotate to face player's ship
+                
+                // Set high health - 3x stronger (45 HP)
+                enemy.setData('health', 45);
+                enemy.setData('maxHealth', 45);
+                
+                // Initial downward movement with slight variation
+                enemy.setVelocityY(80 + (i * 10));
             
-            // Set high health (tougher than elite enemies)
-            enemy.setData('health', 15);
-            enemy.setData('maxHealth', 15);
-            
-            // Initial downward movement
-            enemy.setVelocityY(80);
-            
-            // Make gecko lantern hover and perform special behavior
-            this.time.delayedCall(1500, () => {
-                if (enemy.active) {
+                // Make gecko lantern hover and perform special behavior with staggered timing
+                this.time.delayedCall(1500 + (i * 200), () => {
+                    if (enemy.active) {
                     // Stop at a position above the player
                     enemy.setVelocityY(0);
                     
@@ -2205,25 +2327,23 @@ this.boss1 = this.physics.add.sprite(500, 500, 'boss1');
                         repeat: -1
                     });
                     
-                    // Left-side circular movement pattern
-                    const centerX = gameWidth / 6; // Keep centered on left side
+                    // Enhanced movement pattern within 50-600px range
+                    const centerX = enemy.x; // Use spawn position as center
                     const centerY = enemy.y;
-                    let angle = 0;
+                    let angle = i * (Math.PI / 3); // Stagger starting angles
                     
                     const circularMovement = this.time.addEvent({
                         delay: 100,
                         callback: () => {
                             if (enemy.active) {
                                 angle += 0.05;
-                                // Simple horizontal back-and-forth movement instead of circular
-                                const amplitude = 25; // Horizontal movement range
+                                // Enhanced horizontal movement within bounds
+                                const amplitude = 40; // Larger movement range
                                 const newX = centerX + Math.sin(angle) * amplitude;
                                 const newY = centerY; // Keep Y position stable
                                 
-                                // Clamp to safe bounds
-                                const leftBound = 80; // Safe margin
-                                const rightBound = gameWidth / 3; // Don't go past left third of screen
-                                enemy.x = Phaser.Math.Clamp(newX, leftBound, rightBound);
+                                // Clamp to new bounds (50-600px)
+                                enemy.x = Phaser.Math.Clamp(newX, 50, 600);
                                 enemy.y = newY; // Keep stable Y position
                             }
                         },
@@ -2240,8 +2360,8 @@ this.boss1 = this.physics.add.sprite(500, 500, 'boss1');
                         }
                     });
                     
-                    // Leave after some time if not destroyed
-                    this.time.delayedCall(12000, () => {
+                    // Leave after some time if not destroyed (staggered timing)
+                    this.time.delayedCall(12000 + (i * 1000), () => {
                         if (enemy.active) {
                             // Stop all effects and leave
                             this.tweens.killTweensOf(enemy);
@@ -2251,8 +2371,9 @@ this.boss1 = this.physics.add.sprite(500, 500, 'boss1');
                             enemy.setVelocityY(100);
                         }
                     });
-                }
-            });
+                    }
+                });
+            }
         }
     }
 
@@ -3036,6 +3157,9 @@ this.boss1 = this.physics.add.sprite(500, 500, 'boss1');
                         repeat: -1
                     });
                     
+                    // Add enhanced movement for low health
+                    this.startKingLanternEnhancedMovement(boss);
+                    
                     // Start boss attack pattern (only visual/sound effects while escorts alive)
                     this.startKingLanternAttack(boss);
                 }
@@ -3071,6 +3195,58 @@ this.boss1 = this.physics.add.sprite(500, 500, 'boss1');
             // Play boss appearance sound
             this.bossExplosionSound.play({ volume: 0.5 });
         }
+    }
+
+    private startKingLanternEnhancedMovement(boss: Phaser.Physics.Arcade.Sprite) {
+        // Check health every 2 seconds for enhanced movement
+        const checkHealthForMovement = () => {
+            if (boss.active) {
+                const healthPercentage = this.bossHealth / 3000;
+                
+                // Enhanced movement when health drops below 40%
+                if (healthPercentage < 0.4) {
+                    // Stop current movement
+                    this.tweens.killTweensOf(boss);
+                    
+                    // Start rapid horizontal movement in 50-500px range with increased speed
+                    this.tweens.add({
+                        targets: boss,
+                        x: Phaser.Math.Between(50, 500),
+                        duration: 800, // Much faster movement
+                        ease: 'Power2',
+                        onComplete: () => {
+                            if (boss.active && this.bossHealth / 3000 < 0.4) {
+                                // Continue rapid movement
+                                this.tweens.add({
+                                    targets: boss,
+                                    x: Phaser.Math.Between(50, 500),
+                                    duration: 800,
+                                    ease: 'Power2',
+                                    repeat: -1,
+                                    yoyo: true
+                                });
+                            }
+                        }
+                    });
+                    
+                    // Also add rapid vertical movement
+                    this.tweens.add({
+                        targets: boss,
+                        y: boss.y + Phaser.Math.Between(-20, 20),
+                        duration: 1000,
+                        ease: 'Sine.easeInOut',
+                        yoyo: true,
+                        repeat: -1
+                    });
+                }
+                
+                // Schedule next health check
+                this.time.delayedCall(2000, checkHealthForMovement);
+            }
+        };
+        
+        // Start health monitoring
+        this.time.delayedCall(5000, checkHealthForMovement); // Start after 5 seconds
     }
 
     private updateBossHealthBar() {
@@ -3296,6 +3472,7 @@ this.boss1 = this.physics.add.sprite(500, 500, 'boss1');
         this.missileEnemies.clear(true, true);
         this.nukerEnemies.clear(true, true);
         this.walkerEnemies.clear(true, true);
+        this.zombieWalkerEnemies.clear(true, true);
         this.enemyLasers.clear(true, true);
         this.enemyMissiles.clear(true, true);
         this.enemyDebris.clear(true, true);
@@ -3840,6 +4017,7 @@ this.boss1 = this.physics.add.sprite(500, 500, 'boss1');
         this.nukerEnemies.clear(true, true);
         this.enemyDebris.clear(true, true);
         this.walkerEnemies.clear(true, true);
+        this.zombieWalkerEnemies.clear(true, true);
         this.enemyProjectiles.clear(true, true);
         this.geckoLanternEnemies.clear(true, true);
         this.escortFighters.clear(true, true);
@@ -4255,8 +4433,11 @@ this.boss1 = this.physics.add.sprite(500, 500, 'boss1');
                         );
                         
                         const speed = 200;
-                        // Move straight down only
-                        fireball.setVelocity(0, speed);
+                        // Fire towards player instead of straight down
+                        fireball.setVelocity(
+                            Math.cos(angle) * speed,
+                            Math.sin(angle) * speed
+                        );
                         fireball.setData('damage', 30);
                         fireball.setRotation(angle + Math.PI/2);
                     }
@@ -5290,5 +5471,117 @@ this.boss1 = this.physics.add.sprite(500, 500, 'boss1');
             }
             console.log('Debug grid disabled');
         }
+    }
+
+    private handleBulletZombieWalkerCollision(
+        bullet: Phaser.Physics.Arcade.Image,
+        zombieWalker: Phaser.Physics.Arcade.Sprite
+    ): void {
+        bullet.destroy();
+        
+        const currentHealth = zombieWalker.getData('health') || 500;
+        const newHealth = currentHealth - 1;
+        zombieWalker.setData('health', newHealth);
+        
+        // Flash effect when hit
+        zombieWalker.setTint(0xff0000);
+        this.time.delayedCall(100, () => {
+            if (zombieWalker.active) {
+                zombieWalker.clearTint();
+            }
+        });
+        
+        if (newHealth <= 0) {
+            // Large explosion for massive zombie walker
+            const explosion = this.add.sprite(zombieWalker.x, zombieWalker.y, 'explosion1');
+            explosion.setScale(2.0); // Large explosion
+            explosion.play('explosion');
+            explosion.once('animationcomplete', () => {
+                explosion.destroy();
+            });
+            
+            // Big score bonus for defeating the zombie walker
+            this.updateScore(1000);
+            
+            // Play boss destruction sound
+            this.bossExplosionSound.play({ volume: 0.8 });
+            
+            zombieWalker.destroy();
+            
+            console.log('Zombie Walker destroyed! 1000 points awarded');
+        } else {
+            // Play hit sound
+            this.explosionSound.play({ volume: 0.3 });
+            console.log(`Zombie Walker hit! Health: ${newHealth}/500`);
+        }
+    }
+
+    private handleZombieWalkerPlayerCollision(): void {
+        if (this.godModeActive) {
+            return; // Player is immune in god mode
+        }
+        
+        // Zombie walker deals massive damage - 25 HP
+        this.gameState.health = Math.max(0, this.gameState.health - 25);
+        this.healthText.setText(`Health: ${this.gameState.health}%`);
+        
+        // Flash player red when hit
+        this.player.setTint(0xff0000);
+        this.time.delayedCall(300, () => {
+            if (this.player.active) {
+                this.player.clearTint();
+            }
+        });
+        
+        // Play hit sound
+        this.explosionSound.play({ volume: 0.5 });
+        
+        if (this.gameState.health <= 0) {
+            this.gameOver();
+        }
+        
+        console.log('Player hit by Zombie Walker! -25 HP');
+    }
+
+    private zombieWalkerShootLaser(zombieWalker: Phaser.Physics.Arcade.Sprite): void {
+        if (!this.player.active || !zombieWalker.active) return;
+        
+        // Calculate angle from zombie walker to player
+        const baseAngle = Phaser.Math.Angle.Between(
+            zombieWalker.x, zombieWalker.y + 15, // Eye level area
+            this.player.x, this.player.y
+        );
+        
+        // Create 2 lasers from both eyes
+        const eyeOffsets = [-8, 8]; // Left and right eye positions
+        
+        eyeOffsets.forEach((eyeOffset, index) => {
+            const laser = this.enemyLasers.create(
+                zombieWalker.x + eyeOffset, // Eye position (left/right)
+                zombieWalker.y + 15, // Eye level shooting
+                'enemy-laser'
+            ) as Phaser.Physics.Arcade.Image;
+            
+            if (laser) {
+                laser.setScale(0.7); // Slightly smaller for dual lasers
+                laser.setTint(0xff0000); // Red laser for more menacing eyes
+                laser.setRotation(baseAngle + Math.PI/2); // Point toward player
+                
+                // Set velocity toward player with slight spread
+                const speed = 250;
+                const spreadAngle = baseAngle + (index === 0 ? -0.1 : 0.1); // Slight spread
+                laser.setVelocity(
+                    Math.cos(spreadAngle) * speed,
+                    Math.sin(spreadAngle) * speed
+                );
+                
+                laser.setData('damage', 12); // Slightly reduced damage per laser
+            }
+        });
+        
+        // Play laser sound
+        this.laserSound.play({ volume: 0.5, detune: -300 }); // Lower pitch for zombie
+        
+        console.log('Zombie Walker fired dual eye lasers at player!');
     }
 } 
