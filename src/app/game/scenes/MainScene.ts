@@ -67,6 +67,8 @@ export class MainScene extends Phaser.Scene {
     private scoreText!: Phaser.GameObjects.Text;
     private healthText!: Phaser.GameObjects.Text;
     private pauseText!: Phaser.GameObjects.Text;
+    private debugGrid: Phaser.GameObjects.Container | null = null;
+    private isDebugGridVisible: boolean = false;
     private background!: Phaser.GameObjects.TileSprite;
     private bgSpeed: number = 2; // Increased speed for more dynamic nebula movement
     private gameState: GameState = {
@@ -142,7 +144,7 @@ export class MainScene extends Phaser.Scene {
     
     private geckoLanternEnemies!: Phaser.Physics.Arcade.Group;
     private lastGeckoLanternSpawnTime: number = 0;
-    private geckoLanternSpawnDelay: number = 18000; // 18 seconds initially
+    private geckoLanternSpawnDelay: number = 3600; // 3.6 seconds initially (5x faster)
     
     private escortFighters!: Phaser.Physics.Arcade.Group;
     private kingLanternBoss!: Phaser.Physics.Arcade.Group;
@@ -642,6 +644,9 @@ export class MainScene extends Phaser.Scene {
         
         // Add restart key
         this.input.keyboard!.addKey('R').on('down', () => this.restartGame());
+        
+        // Add debug grid toggle key
+        this.input.keyboard!.addKey('G').on('down', () => this.toggleDebugGrid());
 
         // Add touch/trackpad controls with enhanced movement and strict bounds
         this.input.on('pointermove', (pointer: Phaser.Input.Pointer) => {
@@ -1585,22 +1590,13 @@ this.boss1 = this.physics.add.sprite(500, 500, 'boss1');
         // Update walker enemies movement with bounds checking
         this.walkerEnemies.getChildren().forEach((walker) => {
             if (walker instanceof Phaser.Physics.Arcade.Sprite) {
-                // Calculate direction to player
-                const angle = Phaser.Math.Angle.Between(
-                    walker.x, walker.y,
-                    this.player.x, this.player.y
-                );
-                
                 // Base speed increases with time
                 const baseSpeed = 150;
                 const timeBonus = Math.min(50, Math.floor(this.gameState.gameTime / 60000) * 10);
                 const speed = baseSpeed + timeBonus;
 
-                // Move towards player
-                walker.setVelocity(
-                    Math.cos(angle) * speed,
-                    Math.sin(angle) * speed
-                );
+                // Move vertically downward only (no diagonal movement)
+                walker.setVelocity(0, speed);
                 
                 // Enforce bounds for walker enemies
                 const walkerHalfWidth = walker.displayWidth / 2;
@@ -1859,9 +1855,8 @@ this.boss1 = this.physics.add.sprite(500, 500, 'boss1');
                     bullet.setScale(0.5);
                     // Apply rotation for spread pattern
                     bullet.setRotation(Phaser.Math.DegToRad(angle));
-                    // Adjust velocity based on angle
-                    const rad = Phaser.Math.DegToRad(angle);
-                    bullet.setVelocityX(Math.sin(rad) * 200);
+                    // No horizontal spread - all bullets go straight up
+                    bullet.setVelocityX(0);
                 }
             });
         } else {
@@ -1898,7 +1893,9 @@ this.boss1 = this.physics.add.sprite(500, 500, 'boss1');
 
     private spawnEnemy() {
         const gameWidth = this.cameras.main.width;
-        const x = Phaser.Math.Between(50, gameWidth - 50);
+        // Use more conservative bounds to ensure enemies stay within screen
+        const margin = 60; // Increased margin for safety
+        const x = Phaser.Math.Between(margin, gameWidth - margin);
         
         // Spawn 3 enemies in a line with wave movement
         for (let i = 0; i < 3; i++) {
@@ -1916,7 +1913,7 @@ this.boss1 = this.physics.add.sprite(500, 500, 'boss1');
                 
                 // Create wave motion using sine wave
                 const startX = enemy.x;
-                const amplitude = 50; // Width of wave
+                const amplitude = 30; // Reduced width of wave to prevent boundary overflow
                 const frequency = 0.003; // Speed of wave
                 
                 this.time.addEvent({
@@ -1925,7 +1922,7 @@ this.boss1 = this.physics.add.sprite(500, 500, 'boss1');
                     callback: () => {
                         if (enemy.active) {
                             const newX = startX + Math.sin(enemy.y * frequency) * amplitude;
-                            // Clamp to normal world bounds
+                            // Clamp to world bounds using actual enemy dimensions
                             const enemyHalfWidth = enemy.displayWidth / 2;
                             enemy.x = Phaser.Math.Clamp(newX, enemyHalfWidth, gameWidth - enemyHalfWidth);
                         }
@@ -1940,11 +1937,13 @@ this.boss1 = this.physics.add.sprite(500, 500, 'boss1');
         if (this.laserEnemies.countActive() >= 2) return;
 
         const gameWidth = this.cameras.main.width;
-        const x = Phaser.Math.Between(100, gameWidth - 100);
+        // Use conservative bounds to ensure enemies stay within screen
+        const margin = 80; // Increased margin for better safety
+        const x = Phaser.Math.Between(margin, gameWidth - margin);
         const enemy = this.laserEnemies.create(x, -100, 'laser-enemy') as Phaser.Physics.Arcade.Sprite;
         
         if (enemy) {
-            enemy.setScale(0.8);
+            enemy.setScale(0.52); // Reduced by 35% from 0.8
             enemy.setData('initialHealth', 5); // Increased from 3
             enemy.setData('health', 5);
             enemy.setData('isHovering', true);
@@ -1976,7 +1975,9 @@ this.boss1 = this.physics.add.sprite(500, 500, 'boss1');
         if (this.missileEnemies.countActive() >= 2) return;
 
         const gameWidth = this.cameras.main.width;
-        const x = Phaser.Math.Between(100, gameWidth - 100);
+        // Use conservative bounds to ensure enemies stay within screen
+        const margin = 80; // Increased margin for better safety
+        const x = Phaser.Math.Between(margin, gameWidth - margin);
         const enemy = this.missileEnemies.create(x, -100, 'missile-enemy') as Phaser.Physics.Arcade.Sprite;
         
         if (enemy) {
@@ -2012,11 +2013,13 @@ this.boss1 = this.physics.add.sprite(500, 500, 'boss1');
         if (this.nukerEnemies.countActive() >= 2) return;
 
         const gameWidth = this.cameras.main.width;
-        const x = Phaser.Math.Between(100, gameWidth - 100);
+        // Use conservative bounds to ensure enemies stay within screen
+        const margin = 80; // Increased margin for better safety
+        const x = Phaser.Math.Between(margin, gameWidth - margin);
         const enemy = this.nukerEnemies.create(x, -100, 'nuker-enemy') as Phaser.Physics.Arcade.Sprite;
         
         if (enemy) {
-            enemy.setScale(0.8);
+            enemy.setScale(0.52); // Reduced by 35% from 0.8
             enemy.setData('initialHealth', 7); // Increased from 5
             enemy.setData('health', 7);
             enemy.setData('isHovering', true);
@@ -2048,15 +2051,17 @@ this.boss1 = this.physics.add.sprite(500, 500, 'boss1');
         if (this.walkerEnemies.countActive() >= 2) return;
 
         const gameWidth = this.cameras.main.width;
+        // Use conservative bounds to ensure walkers stay within screen
+        const margin = 80; // Increased margin for better safety
         const positions = [
-            { x: Phaser.Math.Between(100, gameWidth - 100), y: -100 }
+            { x: Phaser.Math.Between(margin, gameWidth - margin), y: -100 }
         ];
 
         positions.forEach(pos => {
             const walker = this.walkerEnemies.create(pos.x, pos.y, 'walker-enemy') as Phaser.Physics.Arcade.Sprite;
             
             if (walker) {
-                walker.setScale(0.8);
+                walker.setScale(0.52); // Reduced by 35% from 0.8
                 walker.setData('initialHealth', 4); // Increased from 1
                 walker.setData('health', 4);
                 walker.setData('isHovering', true);
@@ -2087,7 +2092,9 @@ this.boss1 = this.physics.add.sprite(500, 500, 'boss1');
 
     private spawnEliteEnemy() {
         const gameWidth = this.cameras.main.width;
-        const x = Phaser.Math.Between(100, gameWidth - 100);
+        // Use conservative bounds to ensure enemies stay within screen
+        const margin = 80; // Increased margin for better safety
+        const x = Phaser.Math.Between(margin, gameWidth - margin);
         const enemy = this.eliteEnemies.create(x, -50, 'elite-enemy') as Phaser.Physics.Arcade.Sprite;
         
         if (enemy) {
@@ -2156,11 +2163,13 @@ this.boss1 = this.physics.add.sprite(500, 500, 'boss1');
         if (this.geckoLanternEnemies.countActive() >= 1) return;
 
         const gameWidth = this.cameras.main.width;
-        const x = gameWidth / 6; // Position on left side (1/6 from left edge)
+        // Ensure gecko lantern stays safely within bounds
+        const margin = 80;
+        const x = Math.max(margin, gameWidth / 6); // Position on left side but respect margin
         const enemy = this.geckoLanternEnemies.create(x, -50, 'gecko-lantern') as Phaser.Physics.Arcade.Sprite;
         
         if (enemy) {
-            enemy.setScale(0.9); // Increased by 50% (was 0.6, now 0.9)
+            enemy.setScale(1.35); // Increased to 1.5x size
             enemy.setAngle(180); // Rotate to face player's ship
             
             // Set high health (tougher than elite enemies)
@@ -2206,16 +2215,16 @@ this.boss1 = this.physics.add.sprite(500, 500, 'boss1');
                         callback: () => {
                             if (enemy.active) {
                                 angle += 0.05;
-                                const radius = 30; // Smaller radius to stay on left
-                                const newX = centerX + Math.cos(angle) * radius;
-                                const newY = centerY + Math.sin(angle) * radius * 0.5; // Elliptical
+                                // Simple horizontal back-and-forth movement instead of circular
+                                const amplitude = 25; // Horizontal movement range
+                                const newX = centerX + Math.sin(angle) * amplitude;
+                                const newY = centerY; // Keep Y position stable
                                 
-                                // Clamp to left side bounds only
-                                const enemyHalfWidth = enemy.displayWidth / 2;
-                                const leftBound = enemyHalfWidth;
+                                // Clamp to safe bounds
+                                const leftBound = 80; // Safe margin
                                 const rightBound = gameWidth / 3; // Don't go past left third of screen
                                 enemy.x = Phaser.Math.Clamp(newX, leftBound, rightBound);
-                                enemy.y = Math.max(50, newY);
+                                enemy.y = newY; // Keep stable Y position
                             }
                         },
                         loop: true
@@ -2250,23 +2259,37 @@ this.boss1 = this.physics.add.sprite(500, 500, 'boss1');
     private spawnEnemyWave(): void {
         const gameWidth = this.cameras.main.width;
         const numEnemies = 5;
-        const spacing = 100;
+        const spacing = 80; // Reduced from 100 to prevent overflow
         const startY = -50;
         
+        // Calculate safe margins accounting for wave movement
+        const waveAmplitude = 30; // Will be used for wave motion
+        const margin = 50 + waveAmplitude; // Safe margin from edges (includes wave amplitude)
+        
+        // Calculate safe spawn area
+        const safeMinX = margin;
+        const safeMaxX = gameWidth - margin;
+        const totalWaveWidth = (numEnemies - 1) * spacing;
+        
         // Determine starting x position based on wave direction
-        const startX = this.waveDirection === 'left' ? 
-            50 : // Start from left
-            gameWidth - 50; // Start from right
+        // Ensure the entire wave fits within safe bounds
+        let startX: number;
+        if (this.waveDirection === 'left') {
+            startX = safeMinX;
+        } else {
+            // For right waves, calculate starting position so the last enemy fits
+            startX = safeMaxX - totalWaveWidth;
+        }
         
         // Spawn enemies in a line
         for (let i = 0; i < numEnemies; i++) {
-            const x = this.waveDirection === 'left' ? 
-                startX + (i * spacing) : 
-                startX - (i * spacing);
+            // Both directions now use addition since we pre-calculated the startX
+            const x = startX + (i * spacing);
             
-            // Ensure enemy spawns within bounds
-            const enemyHalfWidth = 25; // Approximate half width for enemy
-            const clampedX = Phaser.Math.Clamp(x, enemyHalfWidth, gameWidth - enemyHalfWidth);
+            // Additional safety clamp
+            const enemyScale = 0.25;
+            const estimatedEnemyHalfWidth = (100 * enemyScale) / 2; // Assume 100px base width
+            const clampedX = Phaser.Math.Clamp(x, estimatedEnemyHalfWidth, gameWidth - estimatedEnemyHalfWidth);
             
             const enemy = this.enemies.create(clampedX, startY, 'enemy') as Phaser.Physics.Arcade.Sprite;
             
@@ -2282,9 +2305,9 @@ this.boss1 = this.physics.add.sprite(500, 500, 'boss1');
                 
                 enemy.setVelocityY(speed);
                 
-                // Add wave motion
-                const startX = enemy.x;
-                const amplitude = 50;
+                // Add wave motion with reduced amplitude to prevent boundary overflow
+                const startXPos = enemy.x;
+                const amplitude = 30; // Reduced from 50 to prevent going beyond bounds
                 const frequency = 0.003;
                 
                 this.time.addEvent({
@@ -2292,10 +2315,10 @@ this.boss1 = this.physics.add.sprite(500, 500, 'boss1');
                     loop: true,
                     callback: () => {
                         if (enemy.active) {
-                            const newX = startX + Math.sin(enemy.y * frequency) * amplitude;
-                            // Clamp to viewport bounds
-                            const enemyHalfWidth = enemy.displayWidth / 2;
-                            enemy.x = Phaser.Math.Clamp(newX, enemyHalfWidth, gameWidth - enemyHalfWidth);
+                            const newX = startXPos + Math.sin(enemy.y * frequency) * amplitude;
+                            // Use actual enemy dimensions for accurate clamping
+                            const actualEnemyHalfWidth = enemy.displayWidth / 2;
+                            enemy.x = Phaser.Math.Clamp(newX, actualEnemyHalfWidth, gameWidth - actualEnemyHalfWidth);
                         }
                     }
                 });
@@ -2308,17 +2331,18 @@ this.boss1 = this.physics.add.sprite(500, 500, 'boss1');
 
     private spawnNukerPair(): void {
         const gameWidth = this.cameras.main.width;
-        // Spawn two nukers on opposite sides
-        const leftNuker = this.nukerEnemies.create(100, -100, 'nuker-enemy') as Phaser.Physics.Arcade.Sprite;
+        // Use safer margins for nuker pair spawning
+        const margin = 120; // Larger margin to account for scale and movement
+        const leftNuker = this.nukerEnemies.create(margin, -100, 'nuker-enemy') as Phaser.Physics.Arcade.Sprite;
         const rightNuker = this.nukerEnemies.create(
-            gameWidth - 100,
+            gameWidth - margin,
             -100,
             'nuker-enemy'
         ) as Phaser.Physics.Arcade.Sprite;
         
         [leftNuker, rightNuker].forEach((nuker) => {
             if (nuker) {
-                nuker.setScale(0.8);
+                nuker.setScale(0.52); // Reduced by 35% from 0.8
                 nuker.setData('initialHealth', 14); // Double the health
                 nuker.setData('health', 14);
                 nuker.setData('isHovering', true);
@@ -2351,24 +2375,30 @@ this.boss1 = this.physics.add.sprite(500, 500, 'boss1');
 
     private spawnWalkerDebris(x: number, y: number) {
         const numEnemies = 4;  // Spawn 4 regular enemies
-        const spreadRadius = 50;  // Spread radius for spawned enemies
-
+        const gameWidth = this.cameras.main.width;
+        const spreadRadius = 50;  // Radius for circular spawning
+        
         for (let i = 0; i < numEnemies; i++) {
-            const angle = (i * Math.PI * 2) / numEnemies;  // Evenly space enemies in a circle
+            // Circular spawn pattern - evenly spaced around the destruction point
+            const angle = (i * Math.PI * 2) / numEnemies;
             const spawnX = x + Math.cos(angle) * spreadRadius;
             const spawnY = y + Math.sin(angle) * spreadRadius;
             
-            const enemy = this.enemies.create(spawnX, spawnY, 'enemy') as Phaser.Physics.Arcade.Sprite;
+            // Clamp spawn position to stay within screen bounds
+            const clampedX = Phaser.Math.Clamp(spawnX, 60, gameWidth - 60);
+            const clampedY = Math.max(y, spawnY); // Don't spawn above destruction point
+            
+            const enemy = this.enemies.create(clampedX, clampedY, 'enemy') as Phaser.Physics.Arcade.Sprite;
             
             if (enemy) {
                 enemy.setScale(0.5);  // Regular enemy scale
                 
-                // Set velocity based on spawn position (spread outward)
+                // Set velocity in circular spread pattern, then transition to downward
                 const speed = 150;
-                enemy.setVelocity(
-                    Math.cos(angle) * speed,
-                    Math.sin(angle) * speed
-                );
+                const velocityX = Math.cos(angle) * speed;
+                const velocityY = Math.sin(angle) * speed;
+                
+                enemy.setVelocity(velocityX, velocityY);
 
                 // Add a delayed downward velocity
                 this.time.delayedCall(500, () => {
@@ -2387,10 +2417,9 @@ this.boss1 = this.physics.add.sprite(500, 500, 'boss1');
 
         // Use camera dimensions for consistent positioning with player bounds
         const gameWidth = this.cameras.main.width;
-        const gameHeight = this.cameras.main.height;
 
         const boss = this.bossEnemies.create(
-            gameWidth / 4, // Left-center horizontally (25% from left edge)
+            gameWidth / 2, // Start from center horizontally
             -50,
             'firecracker-boss'
         ) as Phaser.Physics.Arcade.Sprite;
@@ -2413,26 +2442,26 @@ this.boss1 = this.physics.add.sprite(500, 500, 'boss1');
             // Boss entry animation to left-center of screen
             this.tweens.add({
                 targets: boss,
-                x: gameWidth / 4, // Left-center position (25% from left edge)
-                y: gameHeight / 2 - 50, // Center vertically (slightly above center)
+                x: gameWidth / 2, // Center horizontally
+                y: 75, // Top area (50-100px range)
                 duration: 2000,
                 ease: 'Power2',
                 onComplete: () => {
-                    // Add subtle hovering effect in left-center
+                    // Add subtle vertical hovering effect in top area
                     this.tweens.add({
                         targets: boss,
-                        y: (gameHeight / 2 - 50) + 15, // Small vertical movement
+                        y: 90, // Small vertical movement within 50-100px range
                         duration: 2000,
                         ease: 'Sine.easeInOut',
-                        yoyo: true, // Move back to center
+                        yoyo: true, // Move back up
                         repeat: -1 // Loop forever
                     });
                     
-                    // Add horizontal drift within left side area
+                    // Add horizontal movement between 100px-700px
                     this.tweens.add({
                         targets: boss,
-                        x: (gameWidth / 4) + 30, // Drift between 25% and ~30% of screen width
-                        duration: 3000,
+                        x: 600, // Move horizontally across the top
+                        duration: 4000,
                         ease: 'Sine.easeInOut',
                         yoyo: true,
                         repeat: -1
@@ -2445,9 +2474,9 @@ this.boss1 = this.physics.add.sprite(500, 500, 'boss1');
                 delay: 500,
                 callback: () => {
                     if (boss.active && Math.random() < 0.1) { // 10% chance per check
-                        // Evasive movement within left side area
-                        const randomY = Phaser.Math.Between(80, 150);
-                        const randomX = Phaser.Math.Between(gameWidth / 6, gameWidth / 3); // Stay in left third
+                        // Evasive movement within top area horizontal range
+                        const randomY = Phaser.Math.Between(50, 100);
+                        const randomX = Phaser.Math.Between(100, 700); // Horizontal movement range
                         this.tweens.add({
                             targets: boss,
                             x: randomX,
@@ -2467,22 +2496,20 @@ this.boss1 = this.physics.add.sprite(500, 500, 'boss1');
                     if (boss.active) {
                         // Fire multiple projectiles in a spread pattern
                         for (let i = -2; i <= 2; i++) {
+                            // Clamp projectile position to stay within bounds
+                            const projectileX = Phaser.Math.Clamp(boss.x + (i * 30), 50, gameWidth - 50);
                             const projectile = this.enemyProjectiles.create(
-                                boss.x + (i * 30),
+                                projectileX,
                                 boss.y + 20,
                                 'boss-laser'
                             ) as Phaser.Physics.Arcade.Image;
                             
                             if (projectile) {
                                 projectile.setScale(0.8);
-                                const angle = 90 + (i * 15);
-                                const radian = Phaser.Math.DegToRad(angle);
                                 const speed = 300;
                                 
-                                projectile.setVelocity(
-                                    Math.cos(radian) * speed,
-                                    Math.sin(radian) * speed
-                                );
+                                // Move straight down only
+                                projectile.setVelocity(0, speed);
                                 projectile.setData('damage', 15);
                             }
                         }
@@ -2545,9 +2572,9 @@ this.boss1 = this.physics.add.sprite(500, 500, 'boss1');
                                             if (angleDiff > maxTurn) angleDiff = maxTurn;
                                             if (angleDiff < -maxTurn) angleDiff = -maxTurn;
                                             
-                                            const adjustedAngle = currentVel.angle() + angleDiff;
-                                            missile.body.velocity.x = Math.cos(adjustedAngle) * currentSpeed;
-                                            missile.body.velocity.y = Math.sin(adjustedAngle) * currentSpeed;
+                                                                            // Simple vertical movement only (no homing)
+                                missile.body.velocity.x = 0;
+                                missile.body.velocity.y = currentSpeed;
                                         }
                                     }
                                 },
@@ -2594,14 +2621,11 @@ this.boss1 = this.physics.add.sprite(500, 500, 'boss1');
                                         ) as Phaser.Physics.Arcade.Image;
                                         
                                         if (debris) {
-                                            const angle = (i * Math.PI * 2) / 8;
                                             const speed = 200;
                                             
                                             debris.setScale(0.6);
-                                            debris.setVelocity(
-                                                Math.cos(angle) * speed,
-                                                Math.sin(angle) * speed
-                                            );
+                                            // Debris moves vertically down only
+                                            debris.setVelocity(0, speed);
                                             debris.setData('damage', 10);
                                         }
                                     }
@@ -2626,7 +2650,7 @@ this.boss1 = this.physics.add.sprite(500, 500, 'boss1');
 
     private spawnTentacleBoss() {
         this.gameState.bossFight = true;
-        this.bossHealth = 50; // Reduced for testing (was 400)
+        this.bossHealth = 1500; // Increased to maximum power
 
         // Use camera dimensions for consistent positioning with player bounds
         const gameWidth = this.cameras.main.width;
@@ -2685,7 +2709,7 @@ this.boss1 = this.physics.add.sprite(500, 500, 'boss1');
                         const fightDuration = (this.time.now - startTime) / 1000; // Duration in seconds
                         
                         // Calculate phase based on fight duration and boss health
-                        const healthPercentage = (this.bossHealth / 400) * 100;
+                        const healthPercentage = (this.bossHealth / 1500) * 100;
                         const phase = this.getBossPhase(fightDuration, healthPercentage);
                         
                         console.log(`Tentacle boss firing - Phase ${phase}, Duration: ${fightDuration.toFixed(1)}s, Health: ${healthPercentage.toFixed(1)}%`);
@@ -2701,8 +2725,10 @@ this.boss1 = this.physics.add.sprite(500, 500, 'boss1');
                         const endIndex = Math.floor(projectileCount / 2);
                         
                         for (let i = startIndex; i <= endIndex; i++) {
+                            // Clamp projectile position to stay within bounds
+                            const projectileX = Phaser.Math.Clamp(currentBoss.x + (i * 30), 50, gameWidth - 50);
                             const projectile = this.enemyProjectiles.create(
-                                currentBoss.x + (i * 30),
+                                projectileX,
                                 currentBoss.y + 30,
                                 'boss-laser'
                             ) as Phaser.Physics.Arcade.Image;
@@ -2711,41 +2737,35 @@ this.boss1 = this.physics.add.sprite(500, 500, 'boss1');
                                 projectile.setActive(true);
                                 projectile.setVisible(true);
                                 projectile.setScale(0.9);
-                                const angle = 90 + (i * 15); // Spread pattern
-                                const radian = Phaser.Math.DegToRad(angle);
                                 const speed = 300 + (phase * 25); // Speed increases with phase
                                 
-                                projectile.setVelocity(
-                                    Math.cos(radian) * speed,
-                                    Math.sin(radian) * speed
-                                );
+                                // Move straight down only
+                                projectile.setVelocity(0, speed);
                                 projectile.setData('damage', 15 + (phase * 2)); // Damage increases with phase
                                 successfulProjectiles++;
                             }
                         }
                         
-                        // Add diagonal shots only in advanced phases
+                        // Add vertical shots only in advanced phases (no diagonal movement)
                         if (phase >= 3) {
                             for (let i = -1; i <= 1; i += 2) {
-                                const diagonalProjectile = this.enemyProjectiles.create(
-                                    currentBoss.x + (i * 20),
+                                // Clamp vertical projectile position to stay within bounds
+                                const vertProjectileX = Phaser.Math.Clamp(currentBoss.x + (i * 30), 50, gameWidth - 50);
+                                const verticalProjectile = this.enemyProjectiles.create(
+                                    vertProjectileX,
                                     currentBoss.y + 30,
                                     'boss-laser'
                                 ) as Phaser.Physics.Arcade.Image;
                                 
-                                if (diagonalProjectile) {
-                                    diagonalProjectile.setActive(true);
-                                    diagonalProjectile.setVisible(true);
-                                    diagonalProjectile.setScale(0.8);
-                                    const angle = 135 + (i * 90); // 45-degree angles
-                                    const radian = Phaser.Math.DegToRad(angle);
-                                    const speed = 350;
+                                if (verticalProjectile) {
+                                    verticalProjectile.setActive(true);
+                                    verticalProjectile.setVisible(true);
+                                    verticalProjectile.setScale(0.8);
                                     
-                                    diagonalProjectile.setVelocity(
-                                        Math.cos(radian) * speed,
-                                        Math.sin(radian) * speed
-                                    );
-                                    diagonalProjectile.setData('damage', 15);
+                                    // Move straight down only
+                                    const speed = 350;
+                                    verticalProjectile.setVelocity(0, speed);
+                                    verticalProjectile.setData('damage', 15);
                                     successfulProjectiles++;
                                 }
                             }
@@ -2770,7 +2790,7 @@ this.boss1 = this.physics.add.sprite(500, 500, 'boss1');
                         const currentBoss = activeBosses[0] as Phaser.Physics.Arcade.Sprite;
                         const startTime = currentBoss.getData('startTime') || this.time.now;
                         const fightDuration = (this.time.now - startTime) / 1000;
-                        const healthPercentage = (this.bossHealth / 400) * 100;
+                        const healthPercentage = (this.bossHealth / 1500) * 100;
                         const phase = this.getBossPhase(fightDuration, healthPercentage);
                         
                         console.log(`Tentacle boss firing missiles - Phase ${phase}`);
@@ -2783,8 +2803,10 @@ this.boss1 = this.physics.add.sprite(500, 500, 'boss1');
                         
                         // Fire homing missiles based on phase
                         for (let i = 0; i < missileCount; i++) {
+                            // Clamp missile position to stay within bounds
+                            const missileX = Phaser.Math.Clamp(currentBoss.x + (i * 40 - 40), 50, gameWidth - 50);
                             const missile = this.enemyProjectiles.create(
-                                currentBoss.x + (i * 40 - 40),
+                                missileX,
                                 currentBoss.y + 20,
                                 'boss-missile'
                             ) as Phaser.Physics.Arcade.Image;
@@ -2805,10 +2827,8 @@ this.boss1 = this.physics.add.sprite(500, 500, 'boss1');
                                 
                                 // Set initial velocity
                                 const speed = 300;
-                                missile.setVelocity(
-                                    Math.cos(spreadAngle) * speed,
-                                    Math.sin(spreadAngle) * speed
-                                );
+                                                            // Move straight down only (no diagonal homing)
+                            missile.setVelocity(0, speed);
                                 missile.setData('damage', 25);
                                 
                                 // Enhanced homing behavior with persistent tracking
@@ -2832,9 +2852,9 @@ this.boss1 = this.physics.add.sprite(500, 500, 'boss1');
                                                 if (angleDiff > maxTurn) angleDiff = maxTurn;
                                                 if (angleDiff < -maxTurn) angleDiff = -maxTurn;
                                                 
-                                                const adjustedAngle = currentVel.angle() + angleDiff;
-                                                missile.body.velocity.x = Math.cos(adjustedAngle) * currentSpeed;
-                                                missile.body.velocity.y = Math.sin(adjustedAngle) * currentSpeed;
+                                                                                // Simple vertical movement only (no homing)
+                                missile.body.velocity.x = 0;
+                                missile.body.velocity.y = currentSpeed;
                                             }
                                         } else {
                                             homingTimer.destroy();
@@ -2865,7 +2885,7 @@ this.boss1 = this.physics.add.sprite(500, 500, 'boss1');
                         const currentBoss = activeBosses[0] as Phaser.Physics.Arcade.Sprite;
                         const startTime = currentBoss.getData('startTime') || this.time.now;
                         const fightDuration = (this.time.now - startTime) / 1000;
-                        const healthPercentage = (this.bossHealth / 400) * 100;
+                        const healthPercentage = (this.bossHealth / 1500) * 100;
                         const phase = this.getBossPhase(fightDuration, healthPercentage);
                         
                         // Bombs only start in Phase 3+
@@ -2881,8 +2901,10 @@ this.boss1 = this.physics.add.sprite(500, 500, 'boss1');
                         
                         // Drop area denial bombs
                         for (let i = 0; i < bombCount; i++) {
+                            // Clamp bomb position to stay within bounds
+                            const bombX = Phaser.Math.Clamp(currentBoss.x + (i * 80 - 40), 50, gameWidth - 50);
                             const bomb = this.enemyProjectiles.create(
-                                currentBoss.x + (i * 80 - 40),
+                                bombX,
                                 currentBoss.y + 20,
                                 'boss-bomb'
                             ) as Phaser.Physics.Arcade.Image;
@@ -2914,14 +2936,11 @@ this.boss1 = this.physics.add.sprite(500, 500, 'boss1');
                                             if (debris && debris.active) {
                                                 debris.setActive(true);
                                                 debris.setVisible(true);
-                                                const angle = (j * Math.PI * 2) / 12;
                                                 const speed = 250;
                                                 
                                                 debris.setScale(0.8);
-                                                debris.setVelocity(
-                                                    Math.cos(angle) * speed,
-                                                    Math.sin(angle) * speed
-                                                );
+                                                                                            // Debris moves vertically down only
+                                            debris.setVelocity(0, speed);
                                                 debris.setData('damage', 15);
                                             }
                                         }
@@ -2960,7 +2979,7 @@ this.boss1 = this.physics.add.sprite(500, 500, 'boss1');
         const boss = this.kingLanternBoss.create(bossX, -50, 'king-lantern') as Phaser.Physics.Arcade.Sprite;
 
         if (boss) {
-            boss.setScale(1.2); // Large, imposing size
+            boss.setScale(1.8); // Massive 1.5x larger size
             boss.setAngle(180); // Face downward
             boss.setData('health', this.bossHealth);
             boss.setData('maxHealth', this.bossHealth);
@@ -2983,7 +3002,7 @@ this.boss1 = this.physics.add.sprite(500, 500, 'boss1');
             // Create first escort (left)
             const escort1 = this.escortFighters.create(escort1X, -50, 'glow-stones') as Phaser.Physics.Arcade.Sprite;
             if (escort1) {
-                escort1.setScale(0.8);
+                escort1.setScale(1.2);
                 escort1.setAngle(180);
                 escort1.setData('health', 125); // Very hard to defeat - 5x more damage required
                 escort1.setData('maxHealth', 125);
@@ -2993,7 +3012,7 @@ this.boss1 = this.physics.add.sprite(500, 500, 'boss1');
             // Create second escort (right)
             const escort2 = this.escortFighters.create(escort2X, -50, 'glow-stones') as Phaser.Physics.Arcade.Sprite;
             if (escort2) {
-                escort2.setScale(0.8);
+                escort2.setScale(1.2);
                 escort2.setAngle(180);
                 escort2.setData('health', 125); // Very hard to defeat - 5x more damage required
                 escort2.setData('maxHealth', 125);
@@ -3072,12 +3091,9 @@ this.boss1 = this.physics.add.sprite(500, 500, 'boss1');
             maxHealth = 3000;
             bossName = "King Lantern Boss";
         }
-        // Check if this is tentacle boss (reduced health for testing)
-        else if (this.bossHealth <= 50) {
-            maxHealth = 50; // Testing value
-            bossName = "Tentacle Boss";
-        } else if (this.bossHealth > 300 && this.bossHealth <= 400) {
-            maxHealth = 400;
+        // Check if this is tentacle boss
+        else if (this.bossHealth > 300 && this.bossHealth <= 1500) {
+            maxHealth = 1500;
             bossName = "Tentacle Boss";
         }
 
@@ -3343,12 +3359,23 @@ this.boss1 = this.physics.add.sprite(500, 500, 'boss1');
 
     private createNukerBurst(nuker: Phaser.Physics.Arcade.Sprite): void {
         const numProjectiles = 8;
+        const gameWidth = this.cameras.main.width;
         
         for (let i = 0; i < numProjectiles; i++) {
+            // Circular burst pattern - evenly spaced around the nuker
             const angle = (i * Math.PI * 2) / numProjectiles;
+            
+            // Calculate spawn position in circular pattern
+            const spawnRadius = 20;
+            const spawnX = nuker.x + Math.cos(angle) * spawnRadius;
+            const spawnY = nuker.y + Math.sin(angle) * spawnRadius;
+            
+            // Clamp spawn position to stay within screen bounds
+            const clampedX = Phaser.Math.Clamp(spawnX, 50, gameWidth - 50);
+            
             const projectile = this.enemyProjectiles.create(
-                nuker.x,
-                nuker.y + 20,
+                clampedX,
+                spawnY,
                 'boss-bomb'
             ) as Phaser.Physics.Arcade.Image;
             
@@ -3356,12 +3383,12 @@ this.boss1 = this.physics.add.sprite(500, 500, 'boss1');
                 projectile.setScale(0.6);
                 projectile.setData('damage', 10);
                 
-                // Set velocity in spread pattern
+                // Set velocity in circular burst pattern
                 const speed = 200;
-                projectile.setVelocity(
-                    Math.cos(angle) * speed,
-                    Math.sin(angle) * speed
-                );
+                const velocityX = Math.cos(angle) * speed;
+                const velocityY = Math.sin(angle) * speed;
+                
+                projectile.setVelocity(velocityX, velocityY);
             }
         }
     }
@@ -3406,11 +3433,11 @@ this.boss1 = this.physics.add.sprite(500, 500, 'boss1');
             
             // Create debris pieces flying outward
             for (let i = 0; i < 12; i++) {
-                const angle = (i * Math.PI * 2) / 12;
                 const distance = Phaser.Math.Between(30, 100);
                 
-                const x = boss.x + Math.cos(angle) * distance;
-                const y = boss.y + Math.sin(angle) * distance;
+                // Simple horizontal spread for debris
+                const x = boss.x + (i % 2 === 0 ? -distance/2 : distance/2);
+                const y = boss.y;
                 
                 const debris = this.add.sprite(x, y, 'fire00');
                 debris.setScale(0.6);
@@ -3418,8 +3445,8 @@ this.boss1 = this.physics.add.sprite(500, 500, 'boss1');
                 // Make debris fly outward
                 this.tweens.add({
                     targets: debris,
-                    x: x + Math.cos(angle) * 200,
-                    y: y + Math.sin(angle) * 200,
+                    x: x + (i % 2 === 0 ? -100 : 100), // Simple horizontal movement
+                    y: y + 200, // Move down vertically
                     alpha: 0,
                     duration: 1000,
                     onComplete: () => {
@@ -3536,13 +3563,10 @@ this.boss1 = this.physics.add.sprite(500, 500, 'boss1');
                 if (angleDiff > maxTurn) angleDiff = maxTurn;
                 if (angleDiff < -maxTurn) angleDiff = -maxTurn;
                 
-                // Calculate new heading
-                const newAngle = currentVel.angle() + angleDiff;
-                
-                // Apply new velocity (maintaining speed)
+                // Simple vertical movement only (no homing)
                 const speed = Math.max(currentSpeed, 300); // Ensure minimum speed
-                missile.body.velocity.x = Math.cos(newAngle) * speed;
-                missile.body.velocity.y = Math.sin(newAngle) * speed;
+                missile.body.velocity.x = 0;
+                missile.body.velocity.y = speed;
                 
                 // Find a new target if current is destroyed
                 if (!target.active) {
@@ -3613,10 +3637,8 @@ this.boss1 = this.physics.add.sprite(500, 500, 'boss1');
             const timeBonus = Math.min(100, Math.floor(this.gameState.gameTime / 60000) * 20);
             const speed = baseSpeed + timeBonus;
             
-            missile.setVelocity(
-                Math.cos(angle) * speed,
-                Math.sin(angle) * speed
-            );
+            // Move straight down only
+            missile.setVelocity(0, speed);
         }
     }
 
@@ -3906,13 +3928,26 @@ this.boss1 = this.physics.add.sprite(500, 500, 'boss1');
     private createDebris(x: number, y: number) {
         const numDebris = 8;  // Create 8 pieces of debris
         const speed = 200;
+        const gameWidth = this.cameras.main.width;
 
         for (let i = 0; i < numDebris; i++) {
+            // Circular debris explosion pattern
             const angle = (i * Math.PI * 2) / numDebris;  // Evenly space debris in a circle
-            const debris = this.enemyDebris.create(x, y, 'debris') as Phaser.Physics.Arcade.Image;
+            
+            // Calculate spawn position with slight offset for visual effect
+            const spawnRadius = 15;
+            const spawnX = x + Math.cos(angle) * spawnRadius;
+            const spawnY = y + Math.sin(angle) * spawnRadius;
+            
+            // Clamp spawn position to stay within screen bounds
+            const clampedX = Phaser.Math.Clamp(spawnX, 50, gameWidth - 50);
+            
+            const debris = this.enemyDebris.create(clampedX, spawnY, 'debris') as Phaser.Physics.Arcade.Image;
             
             if (debris) {
                 debris.setScale(0.5);
+                
+                // Circular explosion velocity with slight random variation
                 let velocityX = Math.cos(angle) * speed;
                 let velocityY = Math.sin(angle) * speed;
 
@@ -3928,6 +3963,7 @@ this.boss1 = this.physics.add.sprite(500, 500, 'boss1');
     }
 
     private startEliteAttack(enemy: Phaser.Physics.Arcade.Sprite) {
+        const gameWidth = this.cameras.main.width;
         // Attack every second
         const attackEvent = this.time.addEvent({
             delay: 1000,
@@ -3935,8 +3971,10 @@ this.boss1 = this.physics.add.sprite(500, 500, 'boss1');
                 if (enemy.active) {
                     // Fire two lasers in V pattern
                     for (let i = -1; i <= 1; i += 2) {
+                        // Clamp laser position to stay within bounds
+                        const laserX = Phaser.Math.Clamp(enemy.x + (i * 15), 30, gameWidth - 30);
                         const laser = this.enemyLasers.create(
-                            enemy.x + (i * 15),
+                            laserX,
                             enemy.y + 20,
                             'enemy-laser'
                         ) as Phaser.Physics.Arcade.Image;
@@ -3944,19 +3982,13 @@ this.boss1 = this.physics.add.sprite(500, 500, 'boss1');
                         if (laser) {
                             laser.setScale(0.8);
                             
-                            // Set trajectory towards player with spread
-                            const angle = Phaser.Math.Angle.Between(
-                                enemy.x, enemy.y,
-                                this.player.x, this.player.y
-                            ) + (i * 0.2); // Add spread
+                            // Simple vertical trajectory (no targeting)
                             
                             const speed = 300;
-                            laser.setVelocity(
-                                Math.cos(angle) * speed,
-                                Math.sin(angle) * speed
-                            );
+                            // Move straight down only
+                            laser.setVelocity(0, speed);
                             
-                            laser.setRotation(angle + Math.PI/2);
+                            laser.setRotation(0); // Face downward
                         }
                     }
                     
@@ -4031,27 +4063,20 @@ this.boss1 = this.physics.add.sprite(500, 500, 'boss1');
                             orb.setTint(0x00ff88); // Green tint for gecko lantern orbs
                             
                             // Spiral outward pattern
-                            const baseAngle = (i * Math.PI * 2) / 4; // 90 degrees apart
                             const speed = 180;
                             
                             // Initial velocity
-                            orb.setVelocity(
-                                Math.cos(baseAngle) * speed * 0.5,
-                                Math.sin(baseAngle) * speed * 0.5 + speed * 0.7 // Mostly downward
-                            );
+                            // Move straight down only
+                            orb.setVelocity(0, speed);
                             
                             // Add spiral effect over time
-                            let spiralAngle = baseAngle;
                             const spiralTimer = this.time.addEvent({
                                 delay: 50,
                                 callback: () => {
                                     if (orb.active) {
-                                        spiralAngle += 0.2;
                                         const currentSpeed = 200;
-                                        orb.setVelocity(
-                                            Math.cos(spiralAngle) * currentSpeed * 0.6,
-                                            Math.sin(spiralAngle) * currentSpeed * 0.4 + currentSpeed * 0.6
-                                        );
+                                        // Move straight down only
+                                        orb.setVelocity(0, currentSpeed);
                                     } else {
                                         spiralTimer.destroy();
                                     }
@@ -4110,11 +4135,10 @@ this.boss1 = this.physics.add.sprite(500, 500, 'boss1');
                 particle.setTint(0x00ff88);
                 particle.setAlpha(0.8);
                 
-                const angle = (i * Math.PI * 2) / 6;
                 this.tweens.add({
                     targets: particle,
-                    x: particle.x + Math.cos(angle) * 60,
-                    y: particle.y + Math.sin(angle) * 60,
+                    x: particle.x + (i % 2 === 0 ? -60 : 60), // Simple left/right movement
+                    y: particle.y + 60,
                     alpha: 0,
                     duration: 800,
                     onComplete: () => {
@@ -4182,19 +4206,9 @@ this.boss1 = this.physics.add.sprite(500, 500, 'boss1');
                                     energyBall.setScale(0.4); // Half the current size (was 0.8, now 0.4)
                                     // No tint needed - laserGreen14.png is already green
                                     
-                                    // Calculate angle towards player with slight spread
-                                    const baseAngle = Phaser.Math.Angle.Between(
-                                        escort.x, escort.y,
-                                        this.player.x, this.player.y
-                                    );
-                                    const spread = (i - 2.5) * 0.1; // Spread pattern
-                                    const angle = baseAngle + spread;
-                                    
                                     const speed = 250;
-                                    energyBall.setVelocity(
-                                        Math.cos(angle) * speed,
-                                        Math.sin(angle) * speed
-                                    );
+                                    // Move straight down only
+                                    energyBall.setVelocity(0, speed);
                                     energyBall.setData('damage', 15);
                                 }
                             }
@@ -4241,10 +4255,8 @@ this.boss1 = this.physics.add.sprite(500, 500, 'boss1');
                         );
                         
                         const speed = 200;
-                        fireball.setVelocity(
-                            Math.cos(angle) * speed,
-                            Math.sin(angle) * speed
-                        );
+                        // Move straight down only
+                        fireball.setVelocity(0, speed);
                         fireball.setData('damage', 30);
                         fireball.setRotation(angle + Math.PI/2);
                     }
@@ -4352,38 +4364,22 @@ this.boss1 = this.physics.add.sprite(500, 500, 'boss1');
                         projectile.setScale(0.8);
                         
                         // Create swirling motion toward player
-                        const baseAngle = Phaser.Math.Angle.Between(
-                            boss.x, boss.y,
-                            this.player.x, this.player.y
-                        );
-                        
-                        // Add swirl offset
-                        const swirlOffset = (i * Math.PI * 2) / 6; // Create spiral pattern
-                        const angle = baseAngle + Math.sin(swirlOffset) * 0.5;
-                        
                         const speed = 180;
-                        projectile.setVelocity(
-                            Math.cos(angle) * speed,
-                            Math.sin(angle) * speed
-                        );
+                        // Move straight down only
+                        projectile.setVelocity(0, speed);
                         projectile.setData('damage', 20);
                         
-                        // Add continuous swirling motion
-                        let swirlAngle = 0;
+                        // Add continuous motion
                         const swirlEvent = this.time.addEvent({
                             delay: 50,
-                            callback: () => {
+                                                            callback: () => {
                                 if (projectile.active) {
-                                    swirlAngle += 0.2;
                                     const currentVel = projectile.body?.velocity;
                                     if (currentVel) {
                                         const magnitude = Math.sqrt(currentVel.x * currentVel.x + currentVel.y * currentVel.y);
-                                        const newAngle = Math.atan2(currentVel.y, currentVel.x) + Math.sin(swirlAngle) * 0.1;
                                         
-                                        projectile.setVelocity(
-                                            Math.cos(newAngle) * magnitude,
-                                            Math.sin(newAngle) * magnitude
-                                        );
+                                                                // Move straight down only
+                        projectile.setVelocity(0, magnitude);
                                     }
                                 } else {
                                     swirlEvent.destroy();
@@ -4408,11 +4404,14 @@ this.boss1 = this.physics.add.sprite(500, 500, 'boss1');
 
     private fireRapidBurst(boss: Phaser.Physics.Arcade.Sprite) {
         // Desperate rapid-fire attack when health is low
+        const gameWidth = this.cameras.main.width;
         for (let i = 0; i < 12; i++) {
             this.time.delayedCall(i * 100, () => {
                 if (boss.active && this.player.active) {
+                    // Clamp swirl projectile position to stay within bounds
+                    const swirlX = Phaser.Math.Clamp(boss.x + (i % 2 === 0 ? -10 : 10), 50, gameWidth - 50);
                     const projectile = this.enemyProjectiles.create(
-                        boss.x + (i % 2 === 0 ? -10 : 10),
+                        swirlX,
                         boss.y + 20,
                         'swirl-weapon-2'
                     ) as Phaser.Physics.Arcade.Image;
@@ -4420,16 +4419,9 @@ this.boss1 = this.physics.add.sprite(500, 500, 'boss1');
                     if (projectile) {
                         projectile.setScale(0.6);
                         
-                        const angle = Phaser.Math.Angle.Between(
-                            boss.x, boss.y,
-                            this.player.x, this.player.y
-                        ) + (Math.random() - 0.5) * 0.3; // Random spread
-                        
                         const speed = 250;
-                        projectile.setVelocity(
-                            Math.cos(angle) * speed,
-                            Math.sin(angle) * speed
-                        );
+                        // Move straight down only
+                        projectile.setVelocity(0, speed);
                         projectile.setData('damage', 15);
                     }
                 }
@@ -4443,11 +4435,15 @@ this.boss1 = this.physics.add.sprite(500, 500, 'boss1');
     private spawnElektrodeFormation() {
         // Spawn 4 Elektrodes in diamond formation
         const gameWidth = this.cameras.main.width;
+        const margin = 80;
+        const center = gameWidth / 2;
+        
+        // Calculate safe formation positions
         const formations = [
-            { x: gameWidth * 0.3, y: -50, delay: 0 },      // Lead
-            { x: gameWidth * 0.25, y: -80, delay: 200 },   // Left wing
-            { x: gameWidth * 0.35, y: -80, delay: 200 },   // Right wing
-            { x: gameWidth * 0.3, y: -110, delay: 400 }    // Rear
+            { x: center, y: -50, delay: 0 },                              // Lead (center)
+            { x: Math.max(margin, center - 40), y: -80, delay: 200 },     // Left wing
+            { x: Math.min(gameWidth - margin, center + 40), y: -80, delay: 200 }, // Right wing
+            { x: center, y: -110, delay: 400 }                            // Rear (center)
         ];
 
         formations.forEach((pos, index) => {
@@ -4542,8 +4538,8 @@ this.boss1 = this.physics.add.sprite(500, 500, 'boss1');
                 if (elektrode.active) {
                     const projectileX = lineStartX + (i * spacing);
                     
-                    // Ensure projectiles stay within screen bounds
-                    const clampedX = Phaser.Math.Clamp(projectileX, 30, gameWidth - 30);
+                    // Ensure projectiles stay within screen bounds with larger margin
+                    const clampedX = Phaser.Math.Clamp(projectileX, 50, gameWidth - 50);
                     
                     // Alternate between lightning bolt assets
                     const boltAsset = i % 2 === 0 ? 'lightning-bolt-1' : 'lightning-bolt-2';
@@ -5202,5 +5198,97 @@ this.boss1 = this.physics.add.sprite(500, 500, 'boss1');
     public setMathQuestionsEnabled(enabled: boolean): void {
         console.log(`Math questions ${enabled ? 'enabled' : 'disabled'}`);
         this.mathQuestionsEnabled = enabled;
+    }
+
+    private createDebugGrid(): void {
+        if (this.debugGrid) {
+            this.debugGrid.destroy();
+        }
+
+        const gameWidth = this.cameras.main.width;
+        const gameHeight = this.cameras.main.height;
+        const gridSize = 50; // Grid spacing in pixels
+        
+        this.debugGrid = this.add.container(0, 0);
+        
+        // Create vertical grid lines with coordinates (left to right)
+        for (let x = 0; x <= gameWidth; x += gridSize) {
+            // Vertical line
+            const line = this.add.graphics();
+            line.lineStyle(1, 0x00ff00, 0.5);
+            line.moveTo(x, 0);
+            line.lineTo(x, gameHeight);
+            line.strokePath();
+            this.debugGrid.add(line);
+            
+            // X coordinate label at top
+            if (x < gameWidth) {
+                const label = this.add.text(x + 2, 2, `${x}`, {
+                    fontSize: '12px',
+                    color: '#00ff00',
+                    backgroundColor: '#000000',
+                    padding: { x: 2, y: 1 }
+                });
+                this.debugGrid.add(label);
+            }
+        }
+        
+        // Create horizontal grid lines with coordinates
+        for (let y = 0; y <= gameHeight; y += gridSize) {
+            // Horizontal line
+            const line = this.add.graphics();
+            line.lineStyle(1, 0x00ff00, 0.5);
+            line.moveTo(0, y);
+            line.lineTo(gameWidth, y);
+            line.strokePath();
+            this.debugGrid.add(line);
+            
+            // Y coordinate label at left
+            if (y < gameHeight && y > 0) {
+                const label = this.add.text(2, y + 2, `${y}`, {
+                    fontSize: '12px',
+                    color: '#00ff00',
+                    backgroundColor: '#000000',
+                    padding: { x: 2, y: 1 }
+                });
+                this.debugGrid.add(label);
+            }
+        }
+        
+        // Add screen dimension labels in corners
+        const dimensionText = this.add.text(gameWidth - 120, gameHeight - 30, `${gameWidth}x${gameHeight}`, {
+            fontSize: '16px',
+            color: '#ffff00',
+            backgroundColor: '#000000',
+            padding: { x: 4, y: 2 }
+        });
+        this.debugGrid.add(dimensionText);
+        
+        // Add instruction text
+        const instructionText = this.add.text(gameWidth - 200, 10, 'Press G to toggle grid', {
+            fontSize: '12px',
+            color: '#ffff00',
+            backgroundColor: '#000000',
+            padding: { x: 4, y: 2 }
+        });
+        this.debugGrid.add(instructionText);
+        
+        // Set depth to render on top of game objects but below UI
+        this.debugGrid.setDepth(1000);
+    }
+
+    private toggleDebugGrid(): void {
+        this.isDebugGridVisible = !this.isDebugGridVisible;
+        
+        if (this.isDebugGridVisible) {
+            this.createDebugGrid();
+            console.log('Debug grid enabled - Press G to toggle');
+        } else {
+            if (this.debugGrid) {
+                this.debugGrid.destroy();
+                this.debugGrid = null;
+            }
+            console.log('Debug grid disabled');
+        }
     }
 } 
