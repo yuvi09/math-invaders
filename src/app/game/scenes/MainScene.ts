@@ -25,6 +25,7 @@ interface GameState {
     godModeUsesRemaining: number;
     lastGodModeUseTime: number;
     lastZombieWalkerSpawnTime: number;
+    lastTrackingLaserTime: number;
 }
 
 enum EnemyType {
@@ -62,6 +63,7 @@ export class MainScene extends Phaser.Scene {
     private nukerEnemies!: Phaser.Physics.Arcade.Group;
     private walkerEnemies!: Phaser.Physics.Arcade.Group;
     private zombieWalkerEnemies!: Phaser.Physics.Arcade.Group;
+    private trackingLasers!: Phaser.Physics.Arcade.Group;
     private enemyLasers!: Phaser.Physics.Arcade.Group;
     private enemyMissiles!: Phaser.Physics.Arcade.Group;
     private enemyDebris!: Phaser.Physics.Arcade.Group;
@@ -96,7 +98,8 @@ export class MainScene extends Phaser.Scene {
         godModeEndTime: 0,
         godModeUsesRemaining: 5,
         lastGodModeUseTime: 0,
-        lastZombieWalkerSpawnTime: 0
+        lastZombieWalkerSpawnTime: 0,
+        lastTrackingLaserTime: 0
     };
     private mathQuestionsEnabled: boolean = false;
 
@@ -423,20 +426,26 @@ export class MainScene extends Phaser.Scene {
     }
 
     private updateFireRate(): void {
+        // Start with base delay
         let newDelay = this.baseShootDelay;
         
-        // Apply Stage 2 ship bonus (20% faster)
+        // Apply Stage 2 bonus (20% faster) if Stage 2 ship is active
         if (this.stage2ShipActive) {
-            newDelay = this.baseShootDelay * this.stage2FireRateBonus;
+            newDelay = newDelay * this.stage2FireRateBonus;
         }
         
-        // Apply enhanced fire bonus (2x faster) - this stacks with Stage 2 bonus
+        // Apply Stage 3 bonus (2x faster) - double the fire rate
+        if (this.gameState.currentStage >= 3) {
+            newDelay = newDelay / 2;
+        }
+        
+        // Apply enhanced fire bonus (2x faster) - this stacks with other bonuses
         if (this.enhancedFireActive) {
             newDelay = newDelay / 2;
         }
         
         this.shootDelay = newDelay;
-        console.log(`Fire rate updated - Stage 2 Ship: ${this.stage2ShipActive}, Enhanced Fire: ${this.enhancedFireActive}, Delay: ${newDelay}ms`);
+        console.log(`Fire rate updated - Stage 2 Ship: ${this.stage2ShipActive}, Stage 3+: ${this.gameState.currentStage >= 3}, Enhanced Fire: ${this.enhancedFireActive}, Delay: ${newDelay}ms`);
     }
 
     preload() {
@@ -505,6 +514,7 @@ export class MainScene extends Phaser.Scene {
         // Load projectiles
         this.load.image('bullet', 'assets/skyforce_assets/PNG/Lasers/laserBlue01.png');
         this.load.image('enemy-laser', 'assets/skyforce_assets/PNG/Lasers/laserRed01.png');
+        this.load.image('tracking-laser', 'assets/skyforce_assets/PNG/Lasers/laserBlue08.png');
         this.load.image('guided-missile', 'assets/skyforce_assets/PNG/Lasers/laserRed08.png'); 
         this.load.image('debris', 'assets/skyforce_assets/PNG/Lasers/laserGreen14.png');
         this.load.image('boss-laser', 'assets/skyforce_assets/PNG/Lasers/laserRed16.png');
@@ -1061,6 +1071,7 @@ this.boss1 = this.physics.add.sprite(500, 500, 'boss1');
             this
         );
 
+
         // Add score text
         this.scoreText = this.add.text(16, 16, 'Score: 0', {
             fontSize: '32px',
@@ -1089,6 +1100,9 @@ this.boss1 = this.physics.add.sprite(500, 500, 'boss1');
         this.firecrackerSound = this.sound.add('firecracker-sound', { volume: 0.3 });
         this.laserSound = this.shootSound; // Use the shoot sound for laser sound
         
+        // Setup tracking laser collisions with all enemy groups (setup after all groups are initialized)
+        // this.setupTrackingLaserCollisions(); // Temporarily disabled
+        
         // Start background music for Stage 1
         this.startStageMusic(this.gameState.currentStage);
 
@@ -1107,6 +1121,13 @@ this.boss1 = this.physics.add.sprite(500, 500, 'boss1');
             maxSize: -1, // Unlimited pool size
             runChildUpdate: true
         });
+
+        // Create tracking laser group for Stage 3 - temporarily disabled
+        // this.trackingLasers = this.physics.add.group({
+        //     classType: Phaser.Physics.Arcade.Image,
+        //     maxSize: 20,
+        //     runChildUpdate: true
+        // });
         
         this.physics.add.overlap(
             this.player,
@@ -1354,6 +1375,14 @@ this.boss1 = this.physics.add.sprite(500, 500, 'boss1');
         
         // Calculate time in minutes for spawn rate adjustments
         const timeMinutes = this.gameState.gameTime / 60000;
+
+        // Stage 3 tracking laser system - temporarily disabled
+        // if (this.gameState.currentStage >= 3 && !this.gameState.bossFight) {
+        //     if (time > this.gameState.lastTrackingLaserTime + 5000) { // Every 5 seconds
+        //         this.fireTrackingLasers();
+        //         this.gameState.lastTrackingLaserTime = time;
+        //     }
+        // }
 
         if (!this.player || !this.cursors) return;
 
@@ -1953,6 +1982,28 @@ this.boss1 = this.physics.add.sprite(500, 500, 'boss1');
                     bullet.setRotation(Phaser.Math.DegToRad(angle));
                     // No horizontal spread - all bullets go straight up
                     bullet.setVelocityX(0);
+                }
+            });
+        } else if (this.gameState.currentStage >= 3) {
+            // Stage 3+ V-formation shooting pattern
+            const angles = [-20, -10, 0, 10, 20]; // V-shaped spread
+            angles.forEach(angle => {
+                const bullet = this.bullets.create(
+                    this.player.x,
+                    this.player.y - 20,
+                    'bullet'
+                ) as Phaser.Physics.Arcade.Image;
+                
+                if (bullet) {
+                    bullet.setActive(true);
+                    bullet.setVisible(true);
+                    const radians = Phaser.Math.DegToRad(angle);
+                    const speed = 600;
+                    bullet.setVelocity(
+                        Math.sin(radians) * speed,
+                        -Math.cos(radians) * speed
+                    );
+                    bullet.setScale(0.5);
                 }
             });
         } else {
@@ -5583,5 +5634,176 @@ this.boss1 = this.physics.add.sprite(500, 500, 'boss1');
         this.laserSound.play({ volume: 0.5, detune: -300 }); // Lower pitch for zombie
         
         console.log('Zombie Walker fired dual eye lasers at player!');
+    }
+
+    private fireTrackingLasers(): void {
+        if (!this.player.active) return;
+
+        // Get all active enemies for targeting
+        const allEnemies = [
+            ...this.enemies.getChildren(),
+            ...this.laserEnemies.getChildren(),
+            ...this.missileEnemies.getChildren(),
+            ...this.nukerEnemies.getChildren(),
+            ...this.walkerEnemies.getChildren(),
+            ...this.zombieWalkerEnemies.getChildren(),
+            ...this.eliteEnemies.getChildren(),
+            ...this.geckoLanternEnemies.getChildren(),
+            ...this.bossEnemies.getChildren()
+        ].filter(enemy => enemy.active);
+
+        if (allEnemies.length === 0) return;
+
+        // Fire 10 tracking lasers
+        for (let i = 0; i < 10; i++) {
+            // Pick a random enemy to target
+            const targetEnemy = Phaser.Utils.Array.GetRandom(allEnemies) as Phaser.Physics.Arcade.Sprite;
+            
+            this.time.delayedCall(i * 100, () => { // Stagger the launches
+                if (this.player.active && targetEnemy.active) {
+                    const trackingLaser = this.trackingLasers.create(
+                        this.player.x + Phaser.Math.Between(-20, 20), // Slight spread
+                        this.player.y - 30,
+                        'tracking-laser'
+                    ) as Phaser.Physics.Arcade.Image;
+
+                    if (trackingLaser) {
+                        trackingLaser.setScale(0.5); // Half size as requested
+                        trackingLaser.setTint(0x00ffff); // Green-blue color
+                        
+                        // Calculate angle to target
+                        const angle = Phaser.Math.Angle.Between(
+                            trackingLaser.x, trackingLaser.y,
+                            targetEnemy.x, targetEnemy.y
+                        );
+                        
+                        trackingLaser.setRotation(angle + Math.PI/2);
+                        
+                        // Set initial velocity toward target
+                        const speed = 400;
+                        trackingLaser.setVelocity(
+                            Math.cos(angle) * speed,
+                            Math.sin(angle) * speed
+                        );
+                        
+                        trackingLaser.setData('damage', 20);
+                        trackingLaser.setData('target', targetEnemy);
+                        trackingLaser.setData('lastUpdateTime', this.time.now);
+                    }
+                }
+            });
+        }
+
+        // Play launch sound
+        this.shootSound.play({ volume: 0.6, detune: 200 });
+        console.log('Fired 10 tracking lasers at enemies!');
+    }
+
+    private setupTrackingLaserCollisions(): void {
+        // Setup collisions individually to avoid group initialization issues
+        this.physics.add.overlap(this.trackingLasers, this.enemies, (laser, enemy) => {
+            if (laser instanceof Phaser.Physics.Arcade.Image && enemy instanceof Phaser.Physics.Arcade.Sprite) {
+                this.handleTrackingLaserCollision(laser, enemy);
+            }
+        });
+
+        this.physics.add.overlap(this.trackingLasers, this.laserEnemies, (laser, enemy) => {
+            if (laser instanceof Phaser.Physics.Arcade.Image && enemy instanceof Phaser.Physics.Arcade.Sprite) {
+                this.handleTrackingLaserCollision(laser, enemy);
+            }
+        });
+
+        this.physics.add.overlap(this.trackingLasers, this.missileEnemies, (laser, enemy) => {
+            if (laser instanceof Phaser.Physics.Arcade.Image && enemy instanceof Phaser.Physics.Arcade.Sprite) {
+                this.handleTrackingLaserCollision(laser, enemy);
+            }
+        });
+
+        this.physics.add.overlap(this.trackingLasers, this.nukerEnemies, (laser, enemy) => {
+            if (laser instanceof Phaser.Physics.Arcade.Image && enemy instanceof Phaser.Physics.Arcade.Sprite) {
+                this.handleTrackingLaserCollision(laser, enemy);
+            }
+        });
+
+        this.physics.add.overlap(this.trackingLasers, this.walkerEnemies, (laser, enemy) => {
+            if (laser instanceof Phaser.Physics.Arcade.Image && enemy instanceof Phaser.Physics.Arcade.Sprite) {
+                this.handleTrackingLaserCollision(laser, enemy);
+            }
+        });
+
+        this.physics.add.overlap(this.trackingLasers, this.zombieWalkerEnemies, (laser, enemy) => {
+            if (laser instanceof Phaser.Physics.Arcade.Image && enemy instanceof Phaser.Physics.Arcade.Sprite) {
+                this.handleTrackingLaserCollision(laser, enemy);
+            }
+        });
+
+        this.physics.add.overlap(this.trackingLasers, this.eliteEnemies, (laser, enemy) => {
+            if (laser instanceof Phaser.Physics.Arcade.Image && enemy instanceof Phaser.Physics.Arcade.Sprite) {
+                this.handleTrackingLaserCollision(laser, enemy);
+            }
+        });
+
+        this.physics.add.overlap(this.trackingLasers, this.geckoLanternEnemies, (laser, enemy) => {
+            if (laser instanceof Phaser.Physics.Arcade.Image && enemy instanceof Phaser.Physics.Arcade.Sprite) {
+                this.handleTrackingLaserCollision(laser, enemy);
+            }
+        });
+
+        this.physics.add.overlap(this.trackingLasers, this.bossEnemies, (laser, enemy) => {
+            if (laser instanceof Phaser.Physics.Arcade.Image && enemy instanceof Phaser.Physics.Arcade.Sprite) {
+                this.handleTrackingLaserCollision(laser, enemy);
+            }
+        });
+
+        this.physics.add.overlap(this.trackingLasers, this.escortFighters, (laser, enemy) => {
+            if (laser instanceof Phaser.Physics.Arcade.Image && enemy instanceof Phaser.Physics.Arcade.Sprite) {
+                this.handleTrackingLaserCollision(laser, enemy);
+            }
+        });
+
+        console.log('Tracking laser collisions setup completed');
+    }
+
+    private handleTrackingLaserCollision(
+        laser: Phaser.Physics.Arcade.Image,
+        enemy: Phaser.Physics.Arcade.Sprite
+    ): void {
+        laser.destroy();
+        
+        const damage = laser.getData('damage') || 20;
+        const currentHealth = enemy.getData('health') || 1;
+        const newHealth = currentHealth - damage;
+        enemy.setData('health', newHealth);
+        
+        // Flash effect when hit
+        enemy.setTint(0x00ffff);
+        this.time.delayedCall(100, () => {
+            if (enemy.active) {
+                enemy.clearTint();
+            }
+        });
+        
+        if (newHealth <= 0) {
+            // Create explosion
+            const explosion = this.add.sprite(enemy.x, enemy.y, 'explosion1');
+            explosion.setScale(1.0);
+            explosion.play('explosion');
+            explosion.once('animationcomplete', () => {
+                explosion.destroy();
+            });
+            
+            // Award points based on enemy type
+            const enemyType = enemy.texture.key;
+            let points = 100;
+            if (enemyType.includes('boss')) points = 500;
+            else if (enemyType.includes('elite')) points = 200;
+            else if (enemyType.includes('zombie')) points = 300;
+            
+            this.updateScore(points);
+            this.explosionSound.play({ volume: 0.4 });
+            enemy.destroy();
+        } else {
+            this.explosionSound.play({ volume: 0.2 });
+        }
     }
 } 
